@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Web Server Configurator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+  <h1>Web Server Configurator</h1>
+
+  <p>GPIO state: <strong><span id="state">%STATE%</span></strong></p>
+  <p>
+    <button class="button" id="btn-on" data-path="/on">ON</button>
+    <button class="button button2" id="btn-off" data-path="/off">OFF</button>
+  </p>
+
+  <h2>
+    <span class="sensor-labels">High Speed Channel Counts</span>
+  </h2>
+
+  <p>
+    <span class="sensor-labels">Counting:</span>
+    <span id="counter">%HSC_COUNT_VALUE%</span>
+    
+    
+  </p>
+
+  <p>
+  <span class="sensor-labels">Direction:</span>
+  <span id="direction">-</span>
+  </p>
+  
+  <p>
+    <span class="sensor-labels">Frequency:</span>
+    <span id="frequency">%HSC_FREQUENCY%</span>
+  </p>
+
+  <!-- Scripts placed at end so DOM elements exist -->
+  <script>
+  // --- WebSocket setup ---
+  const socket = new WebSocket("ws://" + window.location.host + "/ws");
+
+  socket.addEventListener('open', () => console.log("ws opened"));
+  socket.addEventListener('close', () => console.log("ws closed"));
+  socket.addEventListener('error', (e) => console.error("ws err", e));
+
+  // socket.addEventListener('message', (evt) => {
+  //   console.log("WS raw payload:", evt.data, "type:", typeof evt.data);
+  //   try {
+  //     const data = JSON.parse(evt.data);
+  //     const cntEl = document.getElementById("counter");
+  //     const freqEl = document.getElementById("frequency");
+  //     const stateEl = document.getElementById("state");
+
+  //     if (cntEl && data.count !== undefined) cntEl.textContent = data.count;
+  //     if (freqEl && data.freq !== undefined) freqEl.textContent = data.freq;
+  //     if (stateEl && data.state !== undefined) stateEl.textContent = data.state;
+  //   } catch(e) {
+  //     console.warn("ws: can't parse", evt.data);
+  //   }
+  // });
+  
+  socket.addEventListener('message', (evt) => {
+  try {
+    const data = JSON.parse(evt.data);
+    const cntEl = document.getElementById("counter");
+    const freqEl = document.getElementById("frequency");
+    const stateEl = document.getElementById("state");
+    const dirEl = document.getElementById("direction");
+
+    if (cntEl && data.count !== undefined) cntEl.textContent = data.count;
+    if (freqEl && data.freq !== undefined) freqEl.textContent = data.freq;
+    if (stateEl && data.state !== undefined) stateEl.textContent = data.state;
+    if (dirEl && data.dir !== undefined) dirEl.textContent = data.dir; // CW / CCW / STOP
+  } catch(e) {
+    console.warn("ws: can't parse", evt.data);
+  }
+});
+
+  // --- Toggle function used by buttons ---
+  async function doToggle(path) {
+    try {
+      const res = await fetch(path, { cache: "no-store" });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const j = await res.json(); // expects {"state":"ON"} or {"state":"OFF"}
+
+      // Update local DOM immediately (fast UI feedback)
+      const stateEl = document.getElementById('state');
+      if (stateEl && j.state) stateEl.textContent = j.state;
+
+      console.log('Toggled, server returned', j);
+    } catch (e) {
+      console.error('toggle failed', e);
+    }
+  }
+
+  // --- Attach event listeners to buttons ---
+  document.getElementById('btn-on').addEventListener('click', (e) => {
+    e.preventDefault();
+    const path = e.currentTarget.dataset.path || '/on';
+    doToggle(path);
+  });
+
+  document.getElementById('btn-off').addEventListener('click', (e) => {
+    e.preventDefault();
+    const path = e.currentTarget.dataset.path || '/off';
+    doToggle(path);
+  });
+
+  </script>
+</body>
+</html>

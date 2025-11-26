@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Hardware Timer API Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #2980b9;
+            margin-top: 25px;
+        }
+        .function {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .function-name {
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .parameters {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .returns {
+            background: #d1ecf1;
+            border-left: 4px solid #0dcaf0;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .note {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .example {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        code {
+            background: #f1f3f4;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        .toc {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 20px;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #1976d2;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        .important {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ESP32 Hardware Timer API Documentation</h1>
+        
+        <div class="important">
+            <strong>Important:</strong> This documentation covers the ESP32 hardware timer driver API for PlatformIO with Arduino framework. 
+            <br><br>
+            <strong>Clock Explanation:</strong>
+            <ul>
+                <li><strong>CPU Clock:</strong> 240MHz (main processor frequency)</li>
+                <li><strong>APB Clock:</strong> 80MHz (peripheral bus clock - used by timers)</li>
+                <li><strong>Timer Base:</strong> APB_CLK_FREQ = 80MHz (what timers actually use)</li>
+            </ul>
+            <p><em>Why 80MHz for timers?</em> ESP32 uses different clock domains for power efficiency. Peripherals like timers, UART, SPI run on the APB (Advanced Peripheral Bus) clock at 80MHz, while the CPU cores run at 240MHz. This separation allows better power management and reduces electromagnetic interference.</p>
+        </div>
+
+        <div class="toc">
+            <h3>Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#basic-operations">Basic Timer Operations</a>
+                    <ul>
+                        <li><a href="#initialization">Initialization & Configuration</a></li>
+                        <li><a href="#control">Timer Control</a></li>
+                        <li><a href="#reading">Reading Timer Values</a></li>
+                    </ul>
+                </li>
+                <li><a href="#advanced">Advanced Features</a>
+                    <ul>
+                        <li><a href="#alarms">Alarm Functions</a></li>
+                        <li><a href="#interrupts">Interrupt Handling</a></li>
+                        <li><a href="#isr-functions">ISR-Safe Functions</a></li>
+                    </ul>
+                </li>
+                <li><a href="#examples">Usage Examples</a></li>
+            </ul>
+        </div>
+
+        <h2 id="overview">Overview</h2>
+        <p>The ESP32 has <strong>2 timer groups</strong> with <strong>2 timers each</strong> (total 4 hardware timers):</p>
+        <ul>
+            <li><code>TIMER_GROUP_0</code>: Contains <code>TIMER_0</code> and <code>TIMER_1</code></li>
+            <li><code>TIMER_GROUP_1</code>: Contains <code>TIMER_0</code> and <code>TIMER_1</code></li>
+        </ul>
+
+        <h3>Why 80MHz Timer Clock vs 240MHz CPU Clock?</h3>
+        <div class="example">
+            <strong>ESP32 Clock Architecture:</strong>
+            <div class="code-block">┌─────────────────┐    ┌──────────────────┐
+│   CPU Cores     │    │    Peripherals   │
+│   (240 MHz)     │    │    (80 MHz)      │
+│                 │    │                  │
+│ • Core 0        │    │ • Timers         │
+│ • Core 1        │    │ • UART           │
+│ • Cache         │    │ • SPI            │
+│ • Memory        │    │ • I2C            │
+│                 │    │ • GPIO           │
+└─────────────────┘    └──────────────────┘
+        │                       │
+        └───────┬───────────────┘
+                │
+    ┌───────────▼────────────┐
+    │   Clock Generator      │
+    │   (PLL + Dividers)     │
+    │                        │
+    │ XTAL: 40MHz            │
+    │ CPU_CLK: 80/160/240MHz │
+    │ APB_CLK: 80MHz (fixed) │
+    │ REF_CLK: 1MHz          │
+    └────────────────────────┘</div>
+        </div>
+
+        <div class="note">
+            <strong>Technical Reasons for 80MHz Peripheral Clock:</strong>
+            <ul>
+                <li><strong>Power Efficiency:</strong> Peripherals don't need 240MHz - wastes power</li>
+                <li><strong>EMI Reduction:</strong> Lower frequencies reduce electromagnetic interference</li>
+                <li><strong>Timing Stability:</strong> Independent of CPU frequency scaling</li>
+                <li><strong>Compatibility:</strong> Standard APB bus frequency across ESP32 family</li>
+                <li><strong>Precision:</strong> 80MHz provides good balance of resolution vs range</li>
+            </ul>
+        </div>
+
+        <h3>Clock Configuration Options</h3>
+        <div class="example">
+            <strong>CPU vs Timer Clock Relationship:</strong>
+            <table border="1" style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+                <tr style="background-color: #f8f9fa;">
+                    <th>CPU Frequency</th>
+                    <th>APB Clock (Timers)</th>
+                    <th>Power Mode</th>
+                    <th>Use Case</th>
+                </tr>
+                <tr>
+                    <td>240 MHz</td>
+                    <td>80 MHz</td>
+                    <td>High Performance</td>
+                    <td>Normal operation</td>
+                </tr>
+                <tr>
+                    <td>160 MHz</td>
+                    <td>80 MHz</td>
+                    <td>Balanced</td>
+                    <td>Power-conscious apps</td>
+                </tr>
+                <tr>
+                    <td>80 MHz</td>
+                    <td>80 MHz</td>
+                    <td>Low Power</td>
+                    <td>Battery applications</td>
+                </tr>
+                <tr>
+                    <td>40 MHz</td>
+                    <td>40 MHz</td>
+                    <td>Ultra Low Power</td>
+                    <td>Deep sleep scenarios</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="important">
+            <strong>Key Concepts:</strong>
+            <ul>
+                <li><strong>CPU Clock:</strong> 240 MHz (configurable: 80, 160, 240 MHz)</li>
+                <li><strong>APB Clock:</strong> 80 MHz (peripheral clock - fixed for most configurations)</li>
+                <li><strong>Timer Base Clock:</strong> APB_CLK_FREQ = 80 MHz</li>
+                <li><strong>Counter Width:</strong> 64-bit (0 to 18,446,744,073,709,551,615)</li>
+                <li><strong>Prescaler Range:</strong> 2 to 65,536</li>
+                <li><strong>Resolution Formula:</strong> Resolution = (1 / 80MHz) × Prescaler</li>
+            </ul>
+            
+            <div style="background: #e8f4fd; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                <strong>📚 Clock Domain Explanation:</strong>
+                <p>ESP32 uses multiple clock domains for optimal performance:</p>
+                <ul>
+                    <li><strong>CPU_CLK (240MHz):</strong> Main processor cores, cache, memory</li>
+                    <li><strong>APB_CLK (80MHz):</strong> Timers, UART, I2C, SPI, GPIO</li>
+                    <li><strong>REF_CLK (1MHz):</strong> RTC, deep sleep timers</li>
+                    <li><strong>XTAL_CLK (40MHz):</strong> Crystal oscillator reference</li>
+                </ul>
+                <p><em>This design allows peripherals to run independently of CPU frequency changes, ensuring consistent timing even when CPU enters power-saving modes.</em></p>
+            </div>
+        </div>
+
+        <h2 id="basic-operations">Basic Timer Operations</h2>
+
+        <h3 id="initialization">Initialization & Configuration</h3>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_init(timer_group_t group_num, timer_idx_t timer_num, const timer_config_t *config)</div>
+            <p>Initializes and configures a hardware timer.</p>
+            
+            <div class="parameters">
+                <strong>Parameters:</strong>
+                <ul>
+                    <li><code>group_num</code>: Timer group (TIMER_GROUP_0 or TIMER_GROUP_1)</li>
+                    <li><code>timer_num</code>: Timer index (TIMER_0 or TIMER_1)</li>
+                    <li><code>config</code>: Pointer to timer configuration structure</li>
+                </ul>
+            </div>
+            
+            <div class="returns">
+                <strong>Returns:</strong> ESP_OK on success, ESP_ERR_INVALID_ARG on parameter error
+            </div>
+
+            <div class="example">
+                <strong>Example:</strong>
+                <div class="code-block">timer_config_t timer_config = {
+    .divider = 80,                    // 80MHz / 80 = 1MHz (1µs resolution)
+    .counter_dir = TIMER_COUNT_UP,    // Count upward
+    .counter_en = TIMER_PAUSE,        // Start paused
+    .alarm_en = TIMER_ALARM_DIS,      // Disable alarm
+    .auto_reload = TIMER_AUTORELOAD_DIS  // No auto-reload
+};
+timer_init(TIMER_GROUP_0, TIMER_0, &timer_config);</div>
+            </div>
+        </div>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_set_divider(timer_group_t group_num, timer_idx_t timer_num, uint32_t divider)</div>
+            <p>Sets the clock divider (prescaler) for the timer.</p>
+            
+            <div class="parameters">
+                <strong>Parameters:</strong>
+                <ul>
+                    <li><code>divider</code>: Clock divider value (2 to 65,536)</li>
+                </ul>
+            </div>
+
+            <div class="example">
+                <strong>Common Prescaler Values:</strong>
+                <ul>
+                    <li><code>80</code> → 1µs resolution (1 MHz)</li>
+                    <li><code>800</code> → 10µs resolution (100 kHz)</li>
+                    <li><code>8000</code> → 100µs resolution (10 kHz)</li>
+                    <li><code>80000</code> → 1ms resolution (1 kHz)</li>
+                </ul>
+            </div>
+        </div>
+
+        <h3 id="control">Timer Control</h3>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_start(timer_group_t group_num, timer_idx_t timer_num)</div>
+            <p>Starts the timer counter.</p>
+            
+            <div class="example">
+                <strong>Usage:</strong>
+                <div class="code-block">timer_start(TIMER_GROUP_0, TIMER_0);  // Start counting</div>
+            </div>
+        </div>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_pause(timer_group_t group_num, timer_idx_t timer_num)</div>
+            <p>Pauses the timer counter (preserves current value).</p>
+            
+            <div class="example">
+                <strong>Usage:</strong>
+                <div class="code-block">timer_pause(TIMER_GROUP_0, TIMER_0);  // Pause counting</div>
+            </div>
+        </div>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_set_counter_value(timer_group_t group_num, timer_idx_t timer_num, uint64_t load_val)</div>
+            <p>Sets the timer counter to a specific value.</p>
+            
+            <div class="parameters">
+                <strong>Parameters:</strong>
+                <ul>
+                    <li><code>load_val</code>: Value to set the counter to (0 to 2^64-1)</li>
+                </ul>
+            </div>
+
+            <div class="example">
+                <strong>Usage for Stopwatch Reset:</strong>
+                <div class="code-block">timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);  // Reset to zero</div>
+            </div>
+        </div>
+
+        <h3 id="reading">Reading Timer Values</h3>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_get_counter_value(timer_group_t group_num, timer_idx_t timer_num, uint64_t *timer_val)</div>
+            <p>Reads the current counter value in timer ticks.</p>
+            
+            <div class="parameters">
+                <strong>Parameters:</strong>
+                <ul>
+                    <li><code>timer_val</code>: Pointer to store the counter value</li>
+                </ul>
+            </div>
+
+            <div class="example">
+                <strong>Usage:</strong>
+                <div class="code-block">uint64_t timer_val;
+timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &timer_val);
+uint64_t microseconds = timer_val;  // If prescaler = 80</div>
+            </div>
+        </div>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_get_counter_time_sec(timer_group_t group_num, timer_idx_t timer_num, double *time)</div>
+            <p>Reads the current counter value converted to seconds.</p>
+            
+            <div class="parameters">
+                <strong>Parameters:</strong>
+                <ul>
+                    <li><code>time</code>: Pointer to store time in seconds (double precision)</li>
+                </ul>
+            </div>
+
+            <div class="example">
+                <strong>Usage:</strong>
+                <div class="code-block">double elapsed_seconds;
+timer_get_counter_time_sec(TIMER_GROUP_0, TIMER_0, &elapsed_seconds);</div>
+            </div>
+        </div>
+
+        <h2 id="advanced">Advanced Features</h2>
+
+        <h3 id="alarms">Alarm Functions</h3>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_set_alarm_value(timer_group_t group_num, timer_idx_t timer_num, uint64_t alarm_value)</div>
+            <p>Sets an alarm value that triggers an interrupt when reached.</p>
+            
+            <div class="example">
+                <strong>Usage for 1-second alarm:</strong>
+                <div class="code-block">// With prescaler = 80 (1µs resolution)
+timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 1000000);  // 1 second
+timer_set_alarm(TIMER_GROUP_0, TIMER_0, TIMER_ALARM_EN);</div>
+            </div>
+        </div>
+
+        <h3 id="interrupts">Interrupt Handling</h3>
+
+        <div class="function">
+            <div class="function-name">esp_err_t timer_isr_callback_add(timer_group_t group_num, timer_idx_t timer_num, timer_isr_t isr_handler, void *arg, int intr_alloc_flags)</div>
+            <p>Adds an ISR callback for timer interrupts (recommended method).</p>
+            
+            <div class="parameters">
+                <strong>Parameters:</strong>
+                <ul>
+                    <li><code>isr_handler</code>: Callback function (returns bool for task yield)</li>
+                    <li><code>arg</code>: Parameter passed to callback</li>
+                    <li><code>intr_alloc_flags</code>: Interrupt allocation flags</li>
+                </ul>
+            </div>
+
+            <div class="example">
+                <strong>Example Callback:</strong>
+                <div class="code-block">bool IRAM_ATTR timer_callback(void *args) {
+    // Handle timer interrupt
+    // Return true if higher priority task should run
+    return false;
+}
+
+timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, timer_callback, NULL, 0);</div>
+            </div>
+        </div>
+
+        <h2 id="examples">Complete Usage Examples</h2>
+
+        <h3>Simple Stopwatch Implementation</h3>
+        <div class="example">
+            <div class="code-block">#include "driver/timer.h"
+
+class HardwareStopwatch {
+private:
+    timer_group_t group;
+    timer_idx_t timer;
+    bool running;
+
+public:
+    void init() {
+        group = TIMER_GROUP_0;
+        timer = TIMER_0;
+        running = false;
+        
+        timer_config_t config = {
+            .divider = 80,                    // 1µs resolution
+            .counter_dir = TIMER_COUNT_UP,
+            .counter_en = TIMER_PAUSE,
+            .alarm_en = TIMER_ALARM_DIS,
+            .auto_reload = TIMER_AUTORELOAD_DIS
+        };
+        
+        timer_init(group, timer, &config);
+        timer_set_counter_value(group, timer, 0);
+    }
+    
+    void start() {
+        if (!running) {
+            timer_start(group, timer);
+            running = true;
+        }
+    }
+    
+    void stop() {
+        if (running) {
+            timer_pause(group, timer);
+            running = false;
+        }
+    }
+    
+    void reset() {
+        timer_set_counter_value(group, timer, 0);
+    }
+    
+    uint64_t getMicroseconds() {
+        uint64_t timer_val;
+        timer_get_counter_value(group, timer, &timer_val);
+        return timer_val;  // Direct microseconds with prescaler=80
+    }
+    
+    double getSeconds() {
+        double time_sec;
+        timer_get_counter_time_sec(group, timer, &time_sec);
+        return time_sec;
+    }
+    
+    String getFormattedTime() {
+        uint64_t us = getMicroseconds();
+        uint32_t hours = us / 3600000000ULL;
+        uint32_t minutes = (us % 3600000000ULL) / 60000000ULL;
+        uint32_t seconds = (us % 60000000ULL) / 1000000ULL;
+        uint32_t milliseconds = (us % 1000000ULL) / 1000ULL;
+        
+        return String(hours) + ":" + 
+               String(minutes) + ":" + 
+               String(seconds) + "." + 
+               String(milliseconds);
+    }
+};
+
+// Usage example:
+HardwareStopwatch stopwatch;
+
+void setup() {
+    Serial.begin(115200);
+    stopwatch.init();
+}
+
+void loop() {
+    // Start stopwatch on button press or proximity detection
+    stopwatch.start();
+    
+    delay(1000);  // Simulate some operation
+    
+    // Display elapsed time
+    Serial.println("Elapsed: " + stopwatch.getFormattedTime());
+    
+    // Stop and reset for next cycle
+    stopwatch.stop();
+    stopwatch.reset();
+    
+    delay(2000);
+}</div>
+        </div>
+
+        <div class="note">
+            <strong>Important Notes:</strong>
+            <ul>
+                <li>Timer interrupts should use <code>IRAM_ATTR</code> for ISR functions</li>
+                <li>Timer Groups 0 and 1 may be used by WiFi/Bluetooth - check compatibility</li>
+                <li>Use <code>timer_deinit()</code> to clean up when done</li>
+                <li>64-bit counter provides ~584,942 years at 1µs resolution</li>
+            </ul>
+        </div>
+
+        <h3>Prescaler Calculation Reference</h3>
+        <div class="example">
+            <table border="1" style="border-collapse: collapse; width: 100%;">
+                <tr style="background-color: #f8f9fa;">
+                    <th>Desired Resolution</th>
+                    <th>Prescaler Value</th>
+                    <th>Effective Frequency</th>
+                    <th>Max Time (approx)</th>
+                </tr>
+                <tr>
+                    <td>1 µs</td>
+                    <td>80</td>
+                    <td>1 MHz</td>
+                    <td>584,942 years</td>
+                </tr>
+                <tr>
+                    <td>10 µs</td>
+                    <td>800</td>
+                    <td>100 kHz</td>
+                    <td>5,849,424 years</td>
+                </tr>
+                <tr>
+                    <td>100 µs</td>
+                    <td>8,000</td>
+                    <td>10 kHz</td>
+                    <td>58,494,241 years</td>
+                </tr>
+                <tr>
+                    <td>1 ms</td>
+                    <td>80,000</td>
+                    <td>1 kHz</td>
+                    <td>584,942,417 years</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="important">
+            <strong>For Your Stopwatch Project:</strong>
+            <p>Recommended configuration: <code>prescaler = 80</code> for 1µs resolution. This provides excellent precision for timing applications while maintaining a practically unlimited maximum duration.</p>
+        </div>
+    </div>
+</body>
+</html>

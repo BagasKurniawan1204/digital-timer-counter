@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 PCNT (Pulse Counter) Arduino Framework Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #7f8c8d;
+            margin-top: 25px;
+        }
+        h4 {
+            color: #95a5a6;
+            margin-top: 20px;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            font-style: italic;
+            margin-bottom: 30px;
+        }
+        .overview {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .features {
+            background-color: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #27ae60;
+        }
+        .features ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #e74c3c;
+            font-size: 14px;
+        }
+        .code-block {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            line-height: 1.4;
+            white-space: pre;
+            position: relative;
+        }
+        .code-block::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+        }
+        .code-block .comment {
+            color: #68d391;
+        }
+        .code-block .keyword {
+            color: #90cdf4;
+        }
+        .code-block .string {
+            color: #fbb6ce;
+        }
+        .code-block .number {
+            color: #fbd38d;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #bdc3c7;
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background-color: #34495e;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .function-signature {
+            background-color: #f1c40f;
+            color: #2c3e50;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .parameters {
+            background-color: #e8f4fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .returns {
+            background-color: #fff5f5;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #e74c3c;
+        }
+        .example {
+            background-color: #f0f9ff;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+            margin: 15px 0;
+        }
+        .warning {
+            background-color: #fef5e7;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #f39c12;
+            margin: 15px 0;
+        }
+        .limitation {
+            background-color: #fdecf3;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #e74c3c;
+            margin: 15px 0;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #dee2e6;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 8px 0;
+            padding: 5px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+            display: block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            transition: background-color 0.3s;
+        }
+        .toc a:hover {
+            background-color: #e3f2fd;
+            text-decoration: none;
+        }
+        .checkmark {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .cross {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        /* Fix for content formatting */
+        p {
+            margin: 15px 0;
+            text-align: justify;
+        }
+        
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+                margin: 0 10px;
+            }
+            
+            .code-block {
+                font-size: 12px;
+                padding: 15px;
+            }
+            
+            table {
+                font-size: 12px;
+            }
+            
+            .function-signature {
+                font-size: 12px;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ESP32 PCNT (Pulse Counter) Arduino Framework Documentation</h1>
+        <p class="subtitle">Based on Arduino ESP32 Core 2.0.6 (ESP-IDF 4.4.x)</p>
+
+        <div class="toc">
+            <h3>Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#features">Key Features</a></li>
+                <li><a href="#data-types">Data Types and Enums</a></li>
+                <li><a href="#core-functions">Core Functions</a></li>
+                <li><a href="#complete-example">Complete Example</a></li>
+                <li><a href="#best-practices">Best Practices</a></li>
+                <li><a href="#limitations">Limitations</a></li>
+                <li><a href="#use-cases">Common Use Cases</a></li>
+            </ul>
+        </div>
+
+        <div id="overview" class="overview">
+            <h2>Overview</h2>
+            <p>The Pulse Counter (PCNT) peripheral is designed to count the number of rising and/or falling edges of input signals without CPU intervention. The ESP32 has up to 8 PCNT units, each with 2 channels, allowing for versatile pulse counting applications.</p>
+        </div>
+
+        <div id="features" class="features">
+            <h2>Key Features</h2>
+            <ul>
+                <li><strong>Hardware-based counting</strong> - No CPU intervention required</li>
+                <li><strong>16-bit signed counters</strong> (-32,768 to +32,767)</li>
+                <li><strong>Up to 8 PCNT units</strong> (PCNT_UNIT_0 to PCNT_UNIT_7)</li>
+                <li><strong>2 channels per unit</strong> (PCNT_CHANNEL_0, PCNT_CHANNEL_1)</li>
+                <li><strong>Configurable count modes</strong> (increment, decrement, hold)</li>
+                <li><strong>Event-based interrupts</strong> (overflow, underflow, thresholds)</li>
+                <li><strong>Input filtering</strong> for noise immunity</li>
+                <li><strong>Maximum frequency</strong>: ~10-40MHz (depending on signal quality)</li>
+            </ul>
+        </div>
+
+        <div id="data-types">
+            <h2>Data Types and Enums</h2>
+
+            <h3>Core Types</h3>
+            <div class="code-block">typedef intr_handle_t pcnt_isr_handle_t;
+#define PCNT_PIN_NOT_USED     (-1)  /*!&lt; When selected for a pin, this pin will not be used */</div>
+
+            <h3>Units and Channels</h3>
+            <div class="code-block">typedef enum {
+    PCNT_UNIT_0, /*!&lt; PCNT unit 0 */
+    PCNT_UNIT_1, /*!&lt; PCNT unit 1 */
+    PCNT_UNIT_2, /*!&lt; PCNT unit 2 */
+    PCNT_UNIT_3, /*!&lt; PCNT unit 3 */
+    PCNT_UNIT_4, /*!&lt; PCNT unit 4 (if available) */
+    PCNT_UNIT_5, /*!&lt; PCNT unit 5 (if available) */
+    PCNT_UNIT_6, /*!&lt; PCNT unit 6 (if available) */
+    PCNT_UNIT_7, /*!&lt; PCNT unit 7 (if available) */
+    PCNT_UNIT_MAX,
+} pcnt_unit_t;
+
+typedef enum {
+    PCNT_CHANNEL_0, /*!&lt; PCNT channel 0 */
+    PCNT_CHANNEL_1, /*!&lt; PCNT channel 1 */
+    PCNT_CHANNEL_MAX,
+} pcnt_channel_t;</div>
+
+            <h3>Event Types</h3>
+            <div class="code-block">typedef enum {
+    PCNT_EVT_THRES_1 = 1 &lt;&lt; 2, /*!&lt; Threshold 1 event */
+    PCNT_EVT_THRES_0 = 1 &lt;&lt; 3, /*!&lt; Threshold 0 event */
+    PCNT_EVT_L_LIM   = 1 &lt;&lt; 4, /*!&lt; Low limit event (underflow) */
+    PCNT_EVT_H_LIM   = 1 &lt;&lt; 5, /*!&lt; High limit event (overflow) */
+    PCNT_EVT_ZERO    = 1 &lt;&lt; 6, /*!&lt; Zero crossing event */
+    PCNT_EVT_MAX
+} pcnt_evt_type_t;</div>
+
+            <h3>Control and Count Modes</h3>
+            <div class="code-block">// Control modes
+#define PCNT_MODE_KEEP    PCNT_CHANNEL_LEVEL_ACTION_KEEP    /*!&lt; Won't change counter mode */
+#define PCNT_MODE_REVERSE PCNT_CHANNEL_LEVEL_ACTION_INVERSE /*!&lt; Invert counter mode */
+#define PCNT_MODE_DISABLE PCNT_CHANNEL_LEVEL_ACTION_HOLD    /*!&lt; Inhibit counter */
+
+// Count modes
+#define PCNT_COUNT_DIS PCNT_CHANNEL_EDGE_ACTION_HOLD     /*!&lt; Hold (don't count) */
+#define PCNT_COUNT_INC PCNT_CHANNEL_EDGE_ACTION_INCREASE /*!&lt; Increment counter */
+#define PCNT_COUNT_DEC PCNT_CHANNEL_EDGE_ACTION_DECREASE /*!&lt; Decrement counter */</div>
+
+            <h3>Configuration Structure</h3>
+            <div class="code-block">typedef struct {
+    int pulse_gpio_num;          /*!&lt; Pulse input GPIO number */
+    int ctrl_gpio_num;           /*!&lt; Control signal input GPIO number */
+    pcnt_ctrl_mode_t lctrl_mode; /*!&lt; PCNT low control mode */
+    pcnt_ctrl_mode_t hctrl_mode; /*!&lt; PCNT high control mode */
+    pcnt_count_mode_t pos_mode;  /*!&lt; PCNT positive edge count mode */
+    pcnt_count_mode_t neg_mode;  /*!&lt; PCNT negative edge count mode */
+    int16_t counter_h_lim;       /*!&lt; Maximum counter value */
+    int16_t counter_l_lim;       /*!&lt; Minimum counter value */
+    pcnt_unit_t unit;            /*!&lt; PCNT unit number */
+    pcnt_channel_t channel;      /*!&lt; PCNT channel */
+} pcnt_config_t;</div>
+        </div>
+
+        <div id="core-functions">
+            <h2>Core Functions</h2>
+
+            <h3>Configuration Functions</h3>
+
+            <h4>pcnt_unit_config()</h4>
+            <div class="function-signature">esp_err_t pcnt_unit_config(const pcnt_config_t *pcnt_config);</div>
+            <p><strong>Purpose:</strong> Configure a PCNT unit with specified parameters.</p>
+            <div class="parameters">
+                <strong>Parameters:</strong><br>
+                • <code>pcnt_config</code>: Pointer to configuration structure
+            </div>
+            <div class="returns">
+                <strong>Returns:</strong> <code>ESP_OK</code> on success, error code on failure
+            </div>
+            <div class="warning">
+                <strong>Note:</strong> This function will disable three events: PCNT_EVT_L_LIM, PCNT_EVT_H_LIM, PCNT_EVT_ZERO.
+            </div>
+
+            <h3>Counter Operations</h3>
+
+            <h4>pcnt_get_counter_value()</h4>
+            <div class="function-signature">esp_err_t pcnt_get_counter_value(pcnt_unit_t pcnt_unit, int16_t *count);</div>
+            <p><strong>Purpose:</strong> Read current counter value.</p>
+            <div class="parameters">
+                <strong>Parameters:</strong><br>
+                • <code>pcnt_unit</code>: PCNT unit number<br>
+                • <code>count</code>: Pointer to store counter value (16-bit signed)
+            </div>
+
+            <h4>pcnt_counter_clear()</h4>
+            <div class="function-signature">esp_err_t pcnt_counter_clear(pcnt_unit_t pcnt_unit);</div>
+            <p><strong>Purpose:</strong> Clear and reset PCNT counter value to zero.</p>
+
+            <h4>pcnt_counter_pause() / pcnt_counter_resume()</h4>
+            <div class="function-signature">esp_err_t pcnt_counter_pause(pcnt_unit_t pcnt_unit);
+esp_err_t pcnt_counter_resume(pcnt_unit_t pcnt_unit);</div>
+            <p><strong>Purpose:</strong> Pause/resume counting operations.</p>
+
+            <h3>Interrupt Management</h3>
+
+            <h4>pcnt_isr_register()</h4>
+            <div class="function-signature">esp_err_t pcnt_isr_register(void (*fn)(void *), void *arg, 
+                           int intr_alloc_flags, pcnt_isr_handle_t *handle);</div>
+            <p><strong>Purpose:</strong> Register interrupt service routine.</p>
+            <div class="parameters">
+                <strong>Parameters:</strong><br>
+                • <code>fn</code>: ISR function pointer<br>
+                • <code>arg</code>: Argument passed to ISR<br>
+                • <code>intr_alloc_flags</code>: Interrupt allocation flags<br>
+                • <code>handle</code>: Pointer to store ISR handle
+            </div>
+
+            <h4>pcnt_intr_enable() / pcnt_intr_disable()</h4>
+            <div class="function-signature">esp_err_t pcnt_intr_enable(pcnt_unit_t pcnt_unit);
+esp_err_t pcnt_intr_disable(pcnt_unit_t pcnt_unit);</div>
+            <p><strong>Purpose:</strong> Enable/disable interrupts for specific unit.</p>
+
+            <h4>pcnt_event_enable() / pcnt_event_disable()</h4>
+            <div class="function-signature">esp_err_t pcnt_event_enable(pcnt_unit_t unit, pcnt_evt_type_t evt_type);
+esp_err_t pcnt_event_disable(pcnt_unit_t unit, pcnt_evt_type_t evt_type);</div>
+            <p><strong>Purpose:</strong> Enable/disable specific events that trigger interrupts.</p>
+        </div>
+
+        <div id="complete-example">
+            <h2>Complete Example: Frequency Counter with 32-bit Extension</h2>
+            <div class="example">
+                <p>This example demonstrates how to implement a frequency counter with 32-bit counting capability using manual overflow handling.</p>
+            </div>
+            <div class="code-block">#include "driver/pcnt.h"
+#include "esp_intr_alloc.h"
+#include "soc/pcnt_struct.h"
+
+#define PCNT_INPUT_PIN  4
+#define PCNT_HIGH_LIMIT 32767
+
+static portMUX_TYPE pcnt_spinlock = portMUX_INITIALIZER_UNLOCKED;
+volatile long overflow_count = 0;
+
+// ISR for overflow handling
+static void IRAM_ATTR pcnt_isr_handler(void *arg) {
+    portENTER_CRITICAL_ISR(&pcnt_spinlock);
+    overflow_count++;
+    PCNT.int_clr.val = BIT(PCNT_UNIT_0);
+    portEXIT_CRITICAL_ISR(&pcnt_spinlock);
+}
+
+void setup() {
+    Serial.begin(115200);
+    
+    // Configure PCNT
+    pcnt_config_t pcnt_config = {
+        .pulse_gpio_num = PCNT_INPUT_PIN,
+        .ctrl_gpio_num = PCNT_PIN_NOT_USED,
+        .lctrl_mode = PCNT_MODE_KEEP,
+        .hctrl_mode = PCNT_MODE_KEEP,
+        .pos_mode = PCNT_COUNT_INC,
+        .neg_mode = PCNT_COUNT_DIS,
+        .counter_h_lim = PCNT_HIGH_LIMIT,
+        .counter_l_lim = -32768,
+        .unit = PCNT_UNIT_0,
+        .channel = PCNT_CHANNEL_0,
+    };
+    
+    // Initialize PCNT
+    pcnt_unit_config(&pcnt_config);
+    pcnt_event_enable(PCNT_UNIT_0, PCNT_EVT_H_LIM);
+    pcnt_isr_register(pcnt_isr_handler, NULL, 0, NULL);
+    pcnt_intr_enable(PCNT_UNIT_0);
+    pcnt_counter_clear(PCNT_UNIT_0);
+    pcnt_counter_resume(PCNT_UNIT_0);
+    
+    Serial.println("PCNT Frequency Counter initialized");
+}
+
+// Get total count with overflow handling (32-bit)
+int32_t get_count_32bit() {
+    portENTER_CRITICAL(&pcnt_spinlock);
+    long overflow_copy = overflow_count;
+    int16_t hardware_count = 0;
+    pcnt_get_counter_value(PCNT_UNIT_0, &hardware_count);
+    portEXIT_CRITICAL(&pcnt_spinlock);
+    
+    // Calculate total count
+    int64_t total_64 = (overflow_copy * (int64_t)PCNT_HIGH_LIMIT) + hardware_count;
+    
+    // Convert to 32-bit signed with saturation
+    if (total_64 > INT32_MAX) {
+        return INT32_MAX;  // +2,147,483,647
+    } else if (total_64 < INT32_MIN) {
+        return INT32_MIN;  // -2,147,483,648
+    } else {
+        return (int32_t)total_64;
+    }
+}
+
+// Get frequency (Hz)
+int32_t get_frequency() {
+    static int32_t last_count = 0;
+    
+    int32_t current_count = get_count_32bit();
+    int32_t frequency = current_count - last_count;
+    last_count = current_count;
+    
+    return frequency;
+}
+
+void loop() {
+    int32_t freq = get_frequency();
+    Serial.printf("Frequency: %d Hz\n", freq);
+    delay(1000);
+}</div>
+        </div>
+
+        <div id="best-practices">
+            <h2>Best Practices</h2>
+
+            <h3>GPIO Selection</h3>
+            <table>
+                <tr>
+                    <th>Category</th>
+                    <th>GPIO Pins</th>
+                    <th>Notes</th>
+                </tr>
+                <tr>
+                    <td><span class="checkmark">✅</span> Recommended</td>
+                    <td>4, 5, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33</td>
+                    <td>Internal pull-up/pull-down available</td>
+                </tr>
+                <tr>
+                    <td><span class="warning">⚠️</span> Use with care</td>
+                    <td>34, 35, 36, 39</td>
+                    <td>Input-only, require external pull-ups</td>
+                </tr>
+                <tr>
+                    <td><span class="cross">❌</span> Avoid</td>
+                    <td>6-11</td>
+                    <td>Connected to SPI flash</td>
+                </tr>
+                <tr>
+                    <td><span class="cross">❌</span> Boot pins</td>
+                    <td>0, 2, 12</td>
+                    <td>Can affect boot sequence</td>
+                </tr>
+            </table>
+
+            <h3>High-Frequency Applications</h3>
+            <ul>
+                <li>Use external pull-up resistors (1kΩ-4.7kΩ) for 4MHz+ signals</li>
+                <li>Enable input filtering for noisy environments</li>
+                <li>Implement overflow handling for continuous counting</li>
+                <li>Use dedicated ISR for minimal latency</li>
+                <li>Keep ISR code minimal and use <code>IRAM_ATTR</code></li>
+            </ul>
+
+            <h3>Error Handling</h3>
+            <div class="code-block">esp_err_t err = pcnt_unit_config(&config);
+if (err != ESP_OK) {
+    Serial.printf("PCNT config failed: %s\n", esp_err_to_name(err));
+}</div>
+
+            <h3>Multi-Channel Applications</h3>
+            <ul>
+                <li>Each unit can have 2 channels</li>
+                <li>Use different units for independent counting</li>
+                <li>Share ISR between units for efficiency</li>
+                <li>Use unit-specific overflow variables</li>
+            </ul>
+        </div>
+
+        <div id="limitations" class="limitation">
+            <h2>Limitations</h2>
+            <ul>
+                <li><strong>16-bit hardware counter</strong>: Requires software overflow handling for large counts</li>
+                <li><strong>No built-in 32-bit accumulation</strong>: Manual implementation required</li>
+                <li><strong>Shared interrupts</strong>: All events on a unit share one interrupt</li>
+                <li><strong>Input frequency limit</strong>: ~10-40MHz depending on signal quality</li>
+                <li><strong>Filter resolution</strong>: 10-bit (0-1023 APB clock cycles)</li>
+                <li><strong>Maximum units</strong>: 8 units total (may be limited by specific ESP32 variant)</li>
+            </ul>
+        </div>
+
+        <div id="use-cases">
+            <h2>Common Use Cases</h2>
+            
+            <table>
+                <tr>
+                    <th>Application</th>
+                    <th>Description</th>
+                    <th>Configuration</th>
+                </tr>
+                <tr>
+                    <td><strong>Frequency Measurement</strong></td>
+                    <td>Count pulses per time period</td>
+                    <td>pos_mode = PCNT_COUNT_INC, neg_mode = PCNT_COUNT_DIS</td>
+                </tr>
+                <tr>
+                    <td><strong>Rotary Encoder</strong></td>
+                    <td>Position and speed measurement</td>
+                    <td>Quadrature decoding with 2 channels</td>
+                </tr>
+                <tr>
+                    <td><strong>Flow Sensors</strong></td>
+                    <td>Liquid/gas flow measurement</td>
+                    <td>Single edge counting with filtering</td>
+                </tr>
+                <tr>
+                    <td><strong>Motor Control</strong></td>
+                    <td>RPM measurement</td>
+                    <td>High-speed counting with overflow handling</td>
+                </tr>
+                <tr>
+                    <td><strong>Event Counting</strong></td>
+                    <td>Button presses, sensor triggers</td>
+                    <td>Edge detection with debouncing filter</td>
+                </tr>
+            </table>
+
+            <h3>Performance Specifications</h3>
+            <table>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Value</th>
+                    <th>Notes</th>
+                </tr>
+                <tr>
+                    <td>Maximum frequency</td>
+                    <td>~40 MHz</td>
+                    <td>Theoretical maximum</td>
+                </tr>
+                <tr>
+                    <td>Recommended frequency</td>
+                    <td>~20 MHz</td>
+                    <td>Practical safe limit</td>
+                </tr>
+                <tr>
+                    <td>Counter resolution</td>
+                    <td>16-bit signed</td>
+                    <td>-32,768 to +32,767</td>
+                </tr>
+                <tr>
+                    <td>Filter range</td>
+                    <td>0-1023 cycles</td>
+                    <td>APB clock cycles</td>
+                </tr>
+                <tr>
+                    <td>Number of units</td>
+                    <td>Up to 8</td>
+                    <td>PCNT_UNIT_0 to PCNT_UNIT_7</td>
+                </tr>
+                <tr>
+                    <td>Channels per unit</td>
+                    <td>2</td>
+                    <td>PCNT_CHANNEL_0, PCNT_CHANNEL_1</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="overview">
+            <h2>Conclusion</h2>
+            <p>This documentation covers the essential PCNT functionality available in Arduino ESP32 Core 2.0.6. The PCNT peripheral provides powerful hardware-based pulse counting capabilities that are essential for high-frequency applications. For advanced applications requiring 32-bit counting or higher precision, implement software overflow handling as demonstrated in the examples.</p>
+            
+            <p>Remember that while the hardware counter is limited to 16-bit, proper overflow handling can extend this to 32-bit or even 64-bit counting ranges, making it suitable for applications requiring long-term counting or high-frequency measurements.</p>
+        </div>
+    </div>
+</body>
+</html>

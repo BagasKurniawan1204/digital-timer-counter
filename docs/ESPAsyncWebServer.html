@@ -1,0 +1,257 @@
+html
+<!-- filepath: e:\Kuliah\Project Akhir\Timer and Digital Counter\docs\ESPAsyncWebServer.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ESP Async WebServer Header Documentation</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+body{font-family:Arial,Helvetica,sans-serif;line-height:1.4;margin:1.2rem;background:#fafafa;color:#222;}
+h1,h2,h3{margin-top:1.6em;}
+code,pre{background:#eee;padding:.2em .4em;border-radius:4px;font-size:.9em;}
+section{margin-bottom:2rem;padding:1rem;background:#fff;border:1px solid #ddd;border-radius:6px;}
+table{border-collapse:collapse;width:100%;margin:.5rem 0;}
+th,td{border:1px solid #ccc;padding:.4rem;text-align:left;vertical-align:top;font-size:.85em;}
+th{background:#f0f0f0;}
+dl{margin:0;}
+dt{font-weight:bold;margin-top:.6em;}
+.small{font-size:.75em;color:#555;}
+.badge{display:inline-block;background:#0074d9;color:#fff;padding:.15em .5em;border-radius:3px;font-size:.65em;margin-left:.4em;}
+code.sig{display:block;margin:.25em 0;}
+hr{border:none;border-top:1px solid #ddd;margin:2rem 0;}
+</style>
+</head>
+<body>
+
+<h1>ESPAsyncWebServer.h – API Overview</h1>
+<p>Version: <strong>3.0.6</strong> (Defines: ASYNCWEBSERVER_VERSION_MAJOR=3 / MINOR=0 / REVISION=6)</p>
+<p>This header defines the asynchronous HTTP/WebSocket/EventSource server classes for ESP32 / ESP8266 / RP2040 within the Arduino environment.</p>
+
+<section>
+<h2>Core Enumerations</h2>
+<h3>WebRequestMethod (bitmask)</h3>
+<table>
+<thead><tr><th>Name</th><th>Bit</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>HTTP_GET</td><td>0b00000001</td><td>GET request</td></tr>
+<tr><td>HTTP_POST</td><td>0b00000010</td><td>POST request</td></tr>
+<tr><td>HTTP_DELETE</td><td>0b00000100</td><td>DELETE request</td></tr>
+<tr><td>HTTP_PUT</td><td>0b00001000</td><td>PUT request</td></tr>
+<tr><td>HTTP_PATCH</td><td>0b00010000</td><td>PATCH request</td></tr>
+<tr><td>HTTP_HEAD</td><td>0b00100000</td><td>HEAD request</td></tr>
+<tr><td>HTTP_OPTIONS</td><td>0b01000000</td><td>OPTIONS request</td></tr>
+<tr><td>HTTP_ANY</td><td>0b01111111</td><td>Wildcard mask combining above</td></tr>
+</tbody>
+</table>
+
+<h3>RequestedConnectionType</h3>
+<table>
+<thead><tr><th>Value</th><th>Name</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>-1</td><td>RCT_NOT_USED</td><td>Placeholder/uninitialized</td></tr>
+<tr><td>0</td><td>RCT_DEFAULT</td><td>Default HTTP request</td></tr>
+<tr><td>1</td><td>RCT_HTTP</td><td>Standard HTTP</td></tr>
+<tr><td>2</td><td>RCT_WS</td><td>WebSocket request</td></tr>
+<tr><td>3</td><td>RCT_EVENT</td><td>Server-Sent Events (EventSource)</td></tr>
+<tr><td>4</td><td>RCT_MAX</td><td>Upper bound marker</td></tr>
+</tbody>
+</table>
+
+<h3>WebResponseState</h3>
+<table>
+<thead><tr><th>Name</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>RESPONSE_SETUP</td><td>Initial setup state</td></tr>
+<tr><td>RESPONSE_HEADERS</td><td>Sending headers</td></tr>
+<tr><td>RESPONSE_CONTENT</td><td>Sending body/content</td></tr>
+<tr><td>RESPONSE_WAIT_ACK</td><td>Waiting for TCP ACK</td></tr>
+<tr><td>RESPONSE_END</td><td>Completed successfully</td></tr>
+<tr><td>RESPONSE_FAILED</td><td>Transmission failed/aborted</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Typedefs & Functional Types</h2>
+<table>
+<thead><tr><th>Type</th><th>Definition</th><th>Usage</th></tr></thead>
+<tbody>
+<tr><td>WebRequestMethodComposite</td><td>uint8_t</td><td>Bitmask holding one or multiple HTTP methods</td></tr>
+<tr><td>ArDisconnectHandler</td><td>std::function&lt;void(void)&gt;</td><td>Callback on client disconnect</td></tr>
+<tr><td>AwsResponseFiller</td><td>std::function&lt;size_t(uint8_t*, size_t, size_t)&gt;</td><td>Chunked fill function producing response data</td></tr>
+<tr><td>AwsTemplateProcessor</td><td>std::function&lt;String(const String&)&gt;</td><td>Template variable substitution callback</td></tr>
+<tr><td>ArRequestHandlerFunction</td><td>std::function&lt;void(AsyncWebServerRequest*)&gt;</td><td>Handler for completed header parsing</td></tr>
+<tr><td>ArUploadHandlerFunction</td><td>std::function&lt;void(AsyncWebServerRequest*, const String&, size_t, uint8_t*, size_t, bool)&gt;</td><td>File upload chunk handler</td></tr>
+<tr><td>ArBodyHandlerFunction</td><td>std::function&lt;void(AsyncWebServerRequest*, uint8_t*, size_t, size_t, size_t)&gt;</td><td>Raw body data handler</td></tr>
+<tr><td>ArRequestFilterFunction</td><td>std::function&lt;bool(AsyncWebServerRequest*)&gt;</td><td>Predicate to accept/reject handling</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Class: AsyncWebParameter</h2>
+<p>Represents a single GET/POST (form) or file parameter.</p>
+<table>
+<thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>_name</td><td>String</td><td>Parameter key</td></tr>
+<tr><td>_value</td><td>String</td><td>Parameter value (if not file)</td></tr>
+<tr><td>_size</td><td>size_t</td><td>File size or value length</td></tr>
+<tr><td>_isForm</td><td>bool</td><td>Was part of form POST</td></tr>
+<tr><td>_isFile</td><td>bool</td><td>Indicates file upload</td></tr>
+</tbody>
+</table>
+<p><strong>Key Methods:</strong> name(), value(), size(), isPost(), isFile()</p>
+</section>
+
+<section>
+<h2>Class: AsyncWebHeader</h2>
+<p>Represents a single HTTP request header.</p>
+<p><strong>Key Methods:</strong> name(), value(), toString()</p>
+</section>
+
+<section>
+<h2>Class: AsyncWebServerRequest</h2>
+<p>Encapsulates a client connection and incoming HTTP/WebSocket/EventSource request lifecycle.</p>
+<h3>Notable Responsibilities</h3>
+<ul>
+<li>Parsing HTTP method, URL, headers, parameters, body</li>
+<li>Authentication (basic/digest)</li>
+<li>Managing response object</li>
+<li>File uploads (multipart form data)</li>
+<li>Template and chunked response initiation</li>
+</ul>
+<h3>Selected Methods</h3>
+<pre><code class="sig">method() / methodToString()
+url(), host(), contentType(), contentLength()
+hasHeader(), getHeader(), headers()
+hasParam(), getParam(), params()
+arg(), argName(), args()
+send(...), beginResponse(...)
+redirect(url)
+authenticate(...), requestAuthentication(...)
+addInterestingHeader(name)
+onDisconnect(handler)
+</code></pre>
+</section>
+
+<section>
+<h2>Class: AsyncWebRewrite</h2>
+<p>Defines URL rewrite rules (from → to) optionally gated by filter predicates.</p>
+<p><strong>Methods:</strong> match(request), from(), toUrl(), params(), setFilter()</p>
+</section>
+
+<section>
+<h2>Class: AsyncWebHandler</h2>
+<p>Abstract base for implementing custom route handlers.</p>
+<p><strong>Override Points:</strong> canHandle(), handleRequest(), handleUpload(), handleBody(), isRequestHandlerTrivial()</p>
+<p><strong>Helpers:</strong> setFilter(), setAuthentication()</p>
+</section>
+
+<section>
+<h2>Class: AsyncWebServerResponse</h2>
+<p>Represents outgoing HTTP response including headers, status, body streaming/chunking.</p>
+<p><strong>Core Methods:</strong> setCode(), setContentType(), setContentLength(), addHeader(), _assembleHead(), _respond(), _ack()</p>
+<p><strong>State Tracking:</strong> _started(), _finished(), _failed()</p>
+</section>
+
+<section>
+<h2>Class: AsyncWebServer</h2>
+<p>Main server object binding port and managing rewrites, handlers, static file serving, and connection dispatch.</p>
+<h3>Key Functional Areas</h3>
+<ul>
+<li>begin(), end(): lifecycle</li>
+<li>rewrite(), addRewrite(), removeRewrite(): URL remapping</li>
+<li>on(...): route registration with method filtering</li>
+<li>serveStatic(uri, fs, path): static file/directory serving</li>
+<li>onNotFound(), onFileUpload(), onRequestBody(): global handlers</li>
+<li>reset(): clears all handlers</li>
+</ul>
+</section>
+
+<section>
+<h2>Class: DefaultHeaders (Singleton)</h2>
+<p>Global header list automatically appended to each response.</p>
+<p><strong>Methods:</strong> addHeader(), begin(), end(), Instance()</p>
+</section>
+
+<section>
+<h2>Constants & Macros</h2>
+<table>
+<thead><tr><th>Name</th><th>Value / Purpose</th></tr></thead>
+<tbody>
+<tr><td>ASYNCWEBSERVER_VERSION</td><td>"3.0.6" textual version</td></tr>
+<tr><td>RESPONSE_TRY_AGAIN</td><td>0xFFFFFFFF sentinel meaning “retry filler”</td></tr>
+<tr><td>ASYNCWEBSERVER_REGEX_ATTRIBUTE</td><td>Attribute macro (warning if regex disabled)</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Integration Notes</h2>
+<ul>
+<li>Include header: <code>#include &lt;ESPAsyncWebServer.h&gt;</code></li>
+<li>Requires AsyncTCP (ESP32) or ESPAsyncTCP (ESP8266).</li>
+<li>Use <code>AsyncWebServer server(80); server.begin();</code> to start.</li>
+<li>Route example: <code>server.on("/ping", HTTP_GET, [](auto* req){ req->send(200,"text/plain","pong"); });</code></li>
+<li>Static files: <code>server.serveStatic("/static", LittleFS, "/www");</code></li>
+<li>WebSocket/EventSource provided via included headers (AsyncWebSocket.h / AsyncEventSource.h).</li>
+</ul>
+</section>
+
+<section>
+<h2>Minimal Usage Example</h2>
+<pre><code>// Basic setup
+#include &lt;ESPAsyncWebServer.h&gt;
+
+AsyncWebServer server(80);
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("ssid","pass");
+  while(WiFi.status()!=WL_CONNECTED) delay(200);
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest* req){
+    req->send(200, "text/plain", "Hello Async");
+  });
+
+  server.on("/json", HTTP_GET, [](AsyncWebServerRequest* req){
+    req->send(200, "application/json", "{\"ok\":true}");
+  });
+
+  server.begin();
+}
+
+void loop() {}
+</code></pre>
+</section>
+
+<section>
+<h2>Performance Considerations</h2>
+<ul>
+<li>Non-blocking design: callbacks fire inside AsyncClient events.</li>
+<li>Large responses should use stream or chunked APIs to avoid RAM exhaustion.</li>
+<li>Use template processor for lightweight server-side substitution without full parsing costs.</li>
+</ul>
+</section>
+
+<section>
+<h2>Security Considerations</h2>
+<ul>
+<li>Supports basic and digest authentication per handler.</li>
+<li>Always validate upload sizes to prevent memory issues.</li>
+<li>Add HTTPS/TLS via AsyncTCP SSL if enabled (check ASYNC_TCP_SSL_ENABLED).</li>
+</ul>
+</section>
+
+<section>
+<h2>Licensing</h2>
+<p>LGPL 2.1 – Dynamic linking or object inclusion permitted; modifications to the library itself require redistribution of changes under same license terms.</p>
+</section>
+
+<footer class="small">
+Generated summary documentation for ESPAsyncWebServer.h
+</footer>
+</body>
+</html>
