@@ -8,9 +8,9 @@ void setup(){
  
 void loop() {
   if(digitalRead(14) == LOW){
-    Serial.println("Collision Detected");
-  } else {
     Serial.println("Collision Not Detected");
+  } else {
+    Serial.println("Collision Detected");
   }
   delay(500);
 }

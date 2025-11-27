@@ -131,30 +131,30 @@ esp_err_t pcnt_init() {
     pcnt_event_enable(CHANNEL1_PCNT_UNIT, PCNT_EVT_H_LIM);
     pcnt_event_enable(CHANNEL1_PCNT_UNIT, PCNT_EVT_L_LIM);
     
-    // ========== Channel 2 Configuration (Pin 34) ==========
-    pcnt_config_t pcnt_config_ch2 = {
-        .pulse_gpio_num = CHANNEL2_PIN,
-        .ctrl_gpio_num = PCNT_PIN_NOT_USED,
-        .lctrl_mode = PCNT_MODE_KEEP,
-        .hctrl_mode = PCNT_MODE_KEEP,
-        .pos_mode = PCNT_COUNT_INC,
-        .neg_mode = PCNT_COUNT_INC,
-        .counter_h_lim = PCNT_HIGH_LIMIT,
-        .counter_l_lim = PCNT_LOW_LIMIT,
-        .unit = CHANNEL2_PCNT_UNIT,
-        .channel = PCNT_CHANNEL_0,
-    };
+    // // ========== Channel 2 Configuration (Pin 34) ==========
+    // pcnt_config_t pcnt_config_ch2 = {
+    //     .pulse_gpio_num = CHANNEL2_PIN,
+    //     .ctrl_gpio_num = PCNT_PIN_NOT_USED,
+    //     .lctrl_mode = PCNT_MODE_KEEP,
+    //     .hctrl_mode = PCNT_MODE_KEEP,
+    //     .pos_mode = PCNT_COUNT_INC,
+    //     .neg_mode = PCNT_COUNT_INC,
+    //     .counter_h_lim = PCNT_HIGH_LIMIT,
+    //     .counter_l_lim = PCNT_LOW_LIMIT,
+    //     .unit = CHANNEL2_PCNT_UNIT,
+    //     .channel = PCNT_CHANNEL_0,
+    // };
     
-    ret = pcnt_unit_config(&pcnt_config_ch2);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "CH2: PCNT unit config failed: %d", ret);
-        return ret;
-    }
+    // ret = pcnt_unit_config(&pcnt_config_ch2);
+    // if (ret != ESP_OK) {
+    //     ESP_LOGE(TAG, "CH2: PCNT unit config failed: %d", ret);
+    //     return ret;
+    // }
     
-    pcnt_counter_pause(CHANNEL2_PCNT_UNIT);
-    pcnt_counter_clear(CHANNEL2_PCNT_UNIT);
-    pcnt_event_enable(CHANNEL2_PCNT_UNIT, PCNT_EVT_H_LIM);
-    pcnt_event_enable(CHANNEL2_PCNT_UNIT, PCNT_EVT_L_LIM);
+    // pcnt_counter_pause(CHANNEL2_PCNT_UNIT);
+    // pcnt_counter_clear(CHANNEL2_PCNT_UNIT);
+    // pcnt_event_enable(CHANNEL2_PCNT_UNIT, PCNT_EVT_H_LIM);
+    // pcnt_event_enable(CHANNEL2_PCNT_UNIT, PCNT_EVT_L_LIM);
     
     // ========== ISR Installation ==========
     ret = pcnt_isr_service_install(0);
@@ -164,15 +164,15 @@ esp_err_t pcnt_init() {
     }
     
     pcnt_isr_handler_add(CHANNEL1_PCNT_UNIT, pcnt_ch1_isr_handler, NULL);
-    pcnt_isr_handler_add(CHANNEL2_PCNT_UNIT, pcnt_ch2_isr_handler, NULL);
+    // pcnt_isr_handler_add(CHANNEL2_PCNT_UNIT, pcnt_ch2_isr_handler, NULL);
     
     pcnt_intr_enable(CHANNEL1_PCNT_UNIT);
-    pcnt_intr_enable(CHANNEL2_PCNT_UNIT);
+    // pcnt_intr_enable(CHANNEL2_PCNT_UNIT);
 
     pcnt_set_filter_value(CHANNEL1_PCNT_UNIT, 100);
-    pcnt_set_filter_value(CHANNEL2_PCNT_UNIT, 10);
+    // pcnt_set_filter_value(CHANNEL2_PCNT_UNIT, 10);
     pcnt_filter_enable(CHANNEL1_PCNT_UNIT);
-    pcnt_filter_enable(CHANNEL2_PCNT_UNIT);
+    // pcnt_filter_enable(CHANNEL2_PCNT_UNIT);
 
     ESP_LOGI(TAG, "PCNT initialized: CH1=GPIO%d, CH2=GPIO%d", CHANNEL1_PIN, CHANNEL2_PIN);
     return ESP_OK;

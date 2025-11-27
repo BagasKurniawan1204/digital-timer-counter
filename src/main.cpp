@@ -3,21 +3,29 @@
 #include "timer-operation.h"
 #include "web-server.h"
 
+#define SENSOR_PIN 14
+#define DEBOUNCE_MS 20 // 20 ms in milliseconds
+bool lastState = LOW;
+unsigned long lastChangeMillis = 0;
+bool triggered = false; // one-shot latch
+
 portMUX_TYPE pcnt_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 void setup(){
   Serial.begin(115200);
-  
-  // Start your hw modules and server
+  pinMode(SENSOR_PIN, INPUT_PULLUP);
+
+  // Start hw modules and server
   pcnt_init();
-  timer_init();
+  freq_timer_init();
+  stopwatch_timer_init();
   initWebServer();
 }
 
 void loop() {
   // cleanup websocket clients to avoid zombies
   ws.cleanupClients();
-
+  // Start of command processing
   if(Serial.available()){
     String input = Serial.readString();
     input.trim();
@@ -80,8 +88,37 @@ void loop() {
 
       s_new_frequency_available = false;
     }
-    delay(100);
+    delay(5);
+  }
+  // Sensor reading with debounce and stopwatch control
+  bool raw = digitalRead(SENSOR_PIN); // HIGH = detected in kode kamu
+  unsigned long now = millis();
+
+  if (raw != lastState) {
+    // state changed — start debounce timer
+    lastChangeMillis = now;
+    lastState = raw;
+  } else {
+    if (!triggered && raw == HIGH && (now - lastChangeMillis) >= DEBOUNCE_MS) {
+      // rising edge confirmed
+      Serial.println("RISING EDGE -> START stopwatch");
+      stopwatch_start(); // from your timer header. :contentReference[oaicite:3]{index=3}
+      triggered = true; // prevent retrigger until reset condition
+    }
+
+    // example: reset the latch when sensor goes LOW again (so next rising can trigger)
+    if (triggered && raw == LOW && (now - lastChangeMillis) >= DEBOUNCE_MS) {
+      Serial.println("SENSOR RELEASED -> allow next trigger");
+      triggered = false;
+      stopwatch_stop(); // or pause/reset as your logic needs. :contentReference[oaicite:4]{index=4}
+    }
   }
   
+  if(triggered){
+    Serial.print("Stopwatch running... Elapsed time (ms): ");
+    uint64_t elapsed;
+    timer_get_counter_value(TIMER_GROUP_1, TIMER_0, &elapsed);
+    Serial.println(elapsed / 1000); // convert microseconds to milliseconds
+  }
   delay(5);
 }
