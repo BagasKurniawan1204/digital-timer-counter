@@ -5,9 +5,11 @@
 
 #define SENSOR_PIN 14
 #define DEBOUNCE_MS 20 // 20 ms in milliseconds
+
 bool lastState = LOW;
 unsigned long lastChangeMillis = 0;
-bool triggered = false; // one-shot latch
+bool stopwatch_running = false;
+bool handled_current_high = false;
 
 portMUX_TYPE pcnt_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -91,34 +93,49 @@ void loop() {
     delay(5);
   }
   // Sensor reading with debounce and stopwatch control
-  bool raw = digitalRead(SENSOR_PIN); // HIGH = detected in kode kamu
+  bool raw = digitalRead(SENSOR_PIN); // HIGH = detected
   unsigned long now = millis();
 
   if (raw != lastState) {
-    // state changed — start debounce timer
+    // state changed — start debounce timer and update lastState
     lastChangeMillis = now;
     lastState = raw;
+    // debug
+    // Serial.printf("State changed to %d, start debounce\n", raw);
   } else {
-    if (!triggered && raw == HIGH && (now - lastChangeMillis) >= DEBOUNCE_MS) {
-      // rising edge confirmed
-      Serial.println("RISING EDGE -> START stopwatch");
-      stopwatch_start(); // from your timer header. :contentReference[oaicite:3]{index=3}
-      triggered = true; // prevent retrigger until reset condition
-    }
-
-    // example: reset the latch when sensor goes LOW again (so next rising can trigger)
-    if (triggered && raw == LOW && (now - lastChangeMillis) >= DEBOUNCE_MS) {
-      Serial.println("SENSOR RELEASED -> allow next trigger");
-      triggered = false;
-      stopwatch_stop(); // or pause/reset as your logic needs. :contentReference[oaicite:4]{index=4}
+    // state stable long enough?
+    if ((now - lastChangeMillis) >= DEBOUNCE_MS) {
+      if (raw == HIGH) {
+        // confirmed stable HIGH
+        if (!handled_current_high) {
+          // first time seeing this HIGH -> handle rising action
+          handled_current_high = true; // latch until a LOW is seen (and stable)
+          if (!stopwatch_running) {
+            Serial.println("RISING EDGE -> START stopwatch");
+            stopwatch_start(); // make sure this function exists in timer-operation.h
+            stopwatch_running = true;
+          } else {
+            Serial.println("RISING EDGE -> PAUSE stopwatch");
+            stopwatch_pause(); // or stopwatch_stop() if you want reset
+            stopwatch_running = false;
+          }
+        }
+      } else { // raw == LOW
+        // confirmed stable LOW -> clear latch so next rising will be handled
+        if (handled_current_high) {
+          Serial.println("SENSOR RELEASED -> clear latch, ready for next rising");
+        }
+        handled_current_high = false;
+      }
     }
   }
-  
-  if(triggered){
+
+  // Optional: display elapsed while running
+  if (stopwatch_running) {
+    uint64_t elapsed_us = 0;
+    stopwatch_get_elapsed(&elapsed_us); // helper in your header. :contentReference[oaicite:3]{index=3}
     Serial.print("Stopwatch running... Elapsed time (ms): ");
-    uint64_t elapsed;
-    timer_get_counter_value(TIMER_GROUP_1, TIMER_0, &elapsed);
-    Serial.println(elapsed / 1000); // convert microseconds to milliseconds
+    Serial.println(elapsed_us / 1000ULL);
   }
   delay(5);
 }
