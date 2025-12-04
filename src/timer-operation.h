@@ -5,14 +5,20 @@
 #include "pcnt-configuration.h"
 
 // frequency measurement variables
-static volatile int32_t s_current_count = 0;
-static volatile int32_t s_last_count = 0;
-static volatile int32_t s_frequency_hz = 0;
+static volatile int32_t s_current_count_ch1 = 0;
+static volatile int32_t s_last_count_ch1 = 0;
+static volatile int32_t s_frequency_hz_ch1 = 0;
 static volatile bool s_new_frequency_available = false;
 bool continuous_mode = false;
+volatile uint32_t elapsed_ms = 0;
+bool stopwatch_running = false;
+
+// Global enable flags
+bool counter_enabled = false;
+bool timer_enabled = false;
 
 // Timer interrupt handler for frequency measurement
-bool IRAM_ATTR timer_isr_handler(void *arg) {
+bool IRAM_ATTR timer_isr_handler_pcnt_ch1(void *arg) {
     int16_t current_hw_count;
 
     portENTER_CRITICAL_ISR(&pcnt_spinlock);
@@ -20,8 +26,8 @@ bool IRAM_ATTR timer_isr_handler(void *arg) {
     int32_t current_count = (int32_t)current_hw_count + s_ch1_total_count;
 
     // Calculate frequency (100ms window)
-    s_frequency_hz = (current_count - s_last_count) * 10; // window = 100ms
-    s_last_count = current_count;
+    s_frequency_hz_ch1 = (current_count - s_last_count_ch1) * 10; // window = 100ms
+    s_last_count_ch1 = current_count;
     s_new_frequency_available = true;
     portEXIT_CRITICAL_ISR(&pcnt_spinlock);
 
@@ -42,7 +48,7 @@ void freq_timer_init() {
     
     timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 100000);
     
-    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, timer_isr_handler, NULL, 0);
+    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, timer_isr_handler_pcnt_ch1, NULL, 0);
     timer_start(TIMER_GROUP_0, TIMER_0);
 }
 

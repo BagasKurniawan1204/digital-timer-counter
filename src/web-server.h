@@ -10,63 +10,48 @@
 #include "timer-operation.h"
 
 // Replace with your network credentials
-const char* ssid = "Lockheim";
-const char* password = "Gvunna123";
-
-// Set LED GPIO
-const int ledPin = 25;
-// Stores LED state 
-String ledState;
+const char* ssid = "HSC_TIMER_AP";
+const char* password = "PENSJOSS";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
-String getCounterValue() {
+String get_counter_value() {
   int32_t count = pcnt_get_total_value();
   return String(count);
 }
   
-String getCounterFrequency() {
-  return String(s_frequency_hz);
+String get_counter_frequency() {
+  return String(s_frequency_hz_ch1);
 }
 
 // Replaces placeholder with LED state value
 String processor(const String& var){
-  Serial.println(var);
-  if(var == "STATE"){
-    if(digitalRead(ledPin)){
-      ledState = "ON";
-    }
-    else{
-      ledState = "OFF";
-    }
-    Serial.println(ledState);
-    return ledState;
-  }
-  else if (var == "HSC_COUNT_VALUE"){
-    return getCounterValue();
+  // Serial.println(var);
+  if (var == "HSC_COUNT_VALUE"){
+    return get_counter_value();
   }
   else if (var == "HSC_FREQUENCY"){
-    return getCounterFrequency();
+    return get_counter_frequency();
   }
   return String();
 }
 
-String makeStateJson() {
+String make_state_json() {
+  static int32_t last_count = 0;
   int32_t current = pcnt_get_total_value();
-  String state = digitalRead(ledPin) ? "ON" : "OFF";
+  
   // tentukan arah dari delta
-  int32_t delta = current - s_last_pcnt_count;
+  int32_t delta = current - last_count;
   String dir = "STOP";
   if (delta > 0) dir = "CW";   // putuskan CW / CCW sesuai definisi fisik
   else if (delta < 0) dir = "CCW";
-  s_last_pcnt_count = current;
-
-  char buf[128];
+  last_count = current;
+  char buf[256];
   int n = snprintf(buf, sizeof(buf),
-                   "{\"count\":%ld,\"freq\":%d,\"state\":\"%s\",\"dir\":\"%s\"}",
-                   (long)current, s_frequency_hz, state.c_str(), dir.c_str());
+                   "{\"count\":%ld,\"freq\":%d,\"dir\":\"%s\",\"timer\":%lu,\"c_en\":%d,\"t_en\":%d}",
+                   (long)current, s_frequency_hz_ch1, dir.c_str(), (unsigned long)elapsed_ms, counter_enabled, timer_enabled);
   return String(buf);
 }
  
@@ -80,7 +65,7 @@ void onWsEvent(AsyncWebSocket *server,
     Serial.printf("WS client #%u connected\n", client->id());
     client->setCloseClientOnQueueFull(false);
     // send current state/count/freq to the newly connected client
-    String json = makeStateJson();
+    String json = make_state_json();
     client->text(json);
   } 
   else if (type == WS_EVT_DISCONNECT) {
@@ -105,13 +90,11 @@ void onWsEvent(AsyncWebSocket *server,
 }
 
 void sendRealtimeData() {
-  String json = makeStateJson();
+  String json = make_state_json();
   ws.textAll(json);
 }
 
-void initWebServer() {
-  pinMode(ledPin, OUTPUT);
-
+void web_server_init() {
   // Initialize LittleFS
   if(!LittleFS.begin()){
     Serial.println("An Error has occurred while mounting LittleFS");
@@ -142,30 +125,55 @@ void initWebServer() {
     request->send(LittleFS, "/style.css", "text/css");
   });
 
-  // Turn ON
-  server.on("/on", HTTP_GET, [](AsyncWebServerRequest *request){
-    digitalWrite(ledPin, HIGH);
-    String json = String("{\"state\":\"ON\"}");
-    request->send(200, "application/json", json);
-    // Notify all websocket clients about the new state (and current count/freq)
-    ws.textAll(makeStateJson());
+  // Counter controls
+  server.on("/counter/enable", HTTP_GET, [](AsyncWebServerRequest *request){
+    pcnt_resume();
+    continuous_mode = true;
+    counter_enabled = true;
+    request->send(200, "application/json", "{\"status\":\"enabled\"}");
+    ws.textAll(make_state_json());
+  });
+  server.on("/counter/disable", HTTP_GET, [](AsyncWebServerRequest *request){
+    pcnt_pause();
+    continuous_mode = false;
+    counter_enabled = false;
+    request->send(200, "application/json", "{\"status\":\"disabled\"}");
+    ws.textAll(make_state_json());
+  });
+  server.on("/counter/reset", HTTP_GET, [](AsyncWebServerRequest *request){
+    pcnt_reset();
+    s_last_count_ch1 = 0;
+    s_frequency_hz_ch1 = 0;
+    request->send(200, "application/json", "{\"status\":\"reset\"}");
+    ws.textAll(make_state_json());
   });
 
-  // Turn OFF
-  server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request){
-    digitalWrite(ledPin, LOW);
-    String json = String("{\"state\":\"OFF\"}");
-    request->send(200, "application/json", json);
-    // Notify all websocket clients about the new state (and current count/freq)
-    ws.textAll(makeStateJson());
+  // Timer controls
+  server.on("/timer/enable", HTTP_GET, [](AsyncWebServerRequest *request){
+    timer_enabled = true;
+    request->send(200, "application/json", "{\"status\":\"enabled\"}");
+    ws.textAll(make_state_json());
+  });
+  server.on("/timer/disable", HTTP_GET, [](AsyncWebServerRequest *request){
+    timer_enabled = false;
+    stopwatch_pause();
+    stopwatch_running = false;
+    request->send(200, "application/json", "{\"status\":\"disabled\"}");
+    ws.textAll(make_state_json());
+  });
+  server.on("/timer/reset", HTTP_GET, [](AsyncWebServerRequest *request){
+    stopwatch_reset();
+    elapsed_ms = 0;
+    request->send(200, "application/json", "{\"status\":\"reset\"}");
+    ws.textAll(make_state_json());
   });
 
   // Optional HTTP endpoints (useful during debugging)
   server.on("/counter", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", getCounterValue().c_str());
+    request->send(200, "text/plain", get_counter_value().c_str());
   });
   server.on("/frequency", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", getCounterFrequency().c_str());
+    request->send(200, "text/plain", get_counter_frequency().c_str());
   });
 
   ws.onEvent(onWsEvent);
