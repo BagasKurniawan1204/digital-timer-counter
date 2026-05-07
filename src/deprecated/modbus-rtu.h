@@ -1,3 +1,5 @@
+#ifndef MODBUS_RTU
+#define MODBUS_RTU
 #include <Arduino.h>
 #include <ModbusRTU.h>
 #include "pcnt-configuration.h"
@@ -12,7 +14,6 @@ extern volatile uint32_t elapsed_ms;
 // Callback function for Read-Only registers
 uint16_t cb_RO(TRegister* reg, uint16_t val) {
     // ON_SET dipanggil saat master mau menulis
-    // Kita TOLAK write: return EX_ILLEGAL_FUNCTION
     return Modbus::EX_ILLEGAL_FUNCTION;
 }
 
@@ -96,7 +97,7 @@ void modbus_init() {
     //101 Channel 1 HSC Count Lower WORD; Read Only
     //102 Frequency Channel 1 HSC; Read Only
     //103 Elapsed Timer in ms; Read Only
-    //104 Enable HSC; Read/Write
+    //104 Enable Timer; Read/Write
     //105 Reset Timer; Write Only
     mb.addHreg(100, 0, 6); //100-105
     mb.onGet(HREG(100), cb_GetPCNTch1, 2);
@@ -111,3 +112,5 @@ void modbus_init() {
     mb.onSet(HREG(105), cb_ResetTimer);
     mb.onGet(HREG(105), [](TRegister* r, uint16_t v)->uint16_t { return 0; });
 }
+
+#endif //MODBUS-RTU

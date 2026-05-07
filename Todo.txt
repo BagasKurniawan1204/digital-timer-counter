@@ -1,0 +1,9 @@
+1. Counter Input operation mode 
+
+
+2. Output operation feature
+2. Timer output operation feature
+3. Save current value when power out
+4. RS 485 communication register
+5. Log for website
+6. Login admin
