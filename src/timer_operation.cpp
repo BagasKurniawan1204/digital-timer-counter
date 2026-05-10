@@ -12,19 +12,24 @@
 // TIMER ISR HANDLER
 // =============================================================================
 
+// ISR for frequency measurement timer (100ms interval)
 bool IRAM_ATTR timer_isr_freq_handler(void *arg) {
-    int16_t current_hw_count;
+    int16_t current_hw_count_ch1;
+    int16_t current_hw_count_ch2;
     
     portENTER_CRITICAL_ISR(&pcnt_spinlock);
-    
-    // Read current hardware counter value
-    pcnt_get_counter_value(COUNTER_CH1_PCNT_UNIT, &current_hw_count);
-    int32_t current_count = (int32_t)current_hw_count + s_ch1_total_count;
-    
-    // Calculate frequency (100ms window = multiply by 10 for Hz)
-    s_ch1_frequency_hz = (current_count - s_ch1_last_count) * 10;
+
+    //Channel 1 calculations
+    pcnt_get_counter_value(COUNTER_CH1_PCNT_UNIT, &current_hw_count_ch1);
+    int32_t current_count = (int32_t)current_hw_count_ch1 + s_ch1_total_count;
+    s_ch1_frequency_hz = (current_count - s_ch1_last_count) * 10; // 100ms window = multiply by 10 for Hz
     s_ch1_last_count = current_count;
-    s_ch1_new_freq_available = true;
+    
+    //Channel 2 calculations
+    pcnt_get_counter_value(COUNTER_CH2_PCNT_UNIT, &current_hw_count_ch2);
+    current_count = (int32_t)current_hw_count_ch2 + s_ch2_total_count;
+    s_ch2_frequency_hz = (current_count - s_ch2_last_count) * 10; // 100ms window = multiply by 10 for Hz
+    s_ch2_last_count = current_count;
     
     portEXIT_CRITICAL_ISR(&pcnt_spinlock);
     

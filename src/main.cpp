@@ -135,6 +135,7 @@ void setup() {
     digitalWrite(13, HIGH);   // Backlight ON
     
     ui_init();                // Setup display & draw layout
+    pcnt_resume();
     
     Serial.println("----------------------------------------");
     Serial.println("System ready! Commands: HELP, STATUS, RESET");

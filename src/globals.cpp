@@ -16,8 +16,8 @@ portMUX_TYPE pcnt_spinlock = portMUX_INITIALIZER_UNLOCKED;
 // =============================================================================
 // SYSTEM STATE FLAGS
 // =============================================================================
-bool counter_enabled = false;
-bool timer_enabled = false;
+bool counter_enabled = true;
+bool timer_enabled = true;
 bool continuous_mode = false;
 bool stopwatch_running = false;
 

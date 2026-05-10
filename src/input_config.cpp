@@ -248,6 +248,11 @@ esp_err_t input_config_set_mode(uint8_t channel, const ChannelInputConfig_t* con
     
     // Store configuration
     s_channel_config[channel] = *config;
+
+    // Resume counter
+    if (counter_enabled) {
+        pcnt_counter_resume(unit);
+    }
     
     Serial.printf("Input Config: CH%d mode set to %s successfully\n", 
                   channel + 1, input_mode_to_string(config->input_mode));

@@ -27,7 +27,7 @@ static uint16_t cb_ReadOnly(TRegister* reg, uint16_t val) {
  * @brief Callback to get PCNT Channel 1 Count (Low Word)
  */
 static uint16_t cb_GetCountLo(TRegister* reg, uint16_t val) {
-    int32_t count = pcnt_ch1_get_count();
+    int32_t count = pcnt_ch2_get_count();
     return (uint16_t)(count & 0xFFFF);
 }
 
@@ -35,7 +35,7 @@ static uint16_t cb_GetCountLo(TRegister* reg, uint16_t val) {
  * @brief Callback to get PCNT Channel 1 Count (High Word)
  */
 static uint16_t cb_GetCountHi(TRegister* reg, uint16_t val) {
-    int32_t count = pcnt_ch1_get_count();
+    int32_t count = pcnt_ch2_get_count();
     return (uint16_t)((count >> 16) & 0xFFFF);
 }
 
@@ -43,7 +43,7 @@ static uint16_t cb_GetCountHi(TRegister* reg, uint16_t val) {
  * @brief Callback to get Frequency Channel 1
  */
 static uint16_t cb_GetFrequency(TRegister* reg, uint16_t val) {
-    return (uint16_t)s_ch1_frequency_hz;
+    return (uint16_t)s_ch2_frequency_hz;
 }
 
 /**

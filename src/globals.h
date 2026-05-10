@@ -33,7 +33,6 @@ extern volatile int32_t s_ch1_current_count;    // Current count snapshot
 extern volatile int32_t s_ch1_last_count;       // Last count for frequency calc
 extern volatile int32_t s_ch1_frequency_hz;     // Calculated frequency
 extern volatile uint32_t s_ch1_error_count;     // Error counter
-extern volatile bool s_ch1_new_freq_available;  // New frequency data flag
 
 // =============================================================================
 // COUNTER CHANNEL 2 VARIABLES
@@ -43,7 +42,6 @@ extern volatile int32_t s_ch2_current_count;    // Current count snapshot
 extern volatile int32_t s_ch2_last_count;       // Last count for frequency calc
 extern volatile int32_t s_ch2_frequency_hz;     // Calculated frequency
 extern volatile uint32_t s_ch2_error_count;     // Error counter
-extern volatile bool s_ch2_new_freq_available;  // New frequency data flag
 
 // =============================================================================
 // TIMER VARIABLES
