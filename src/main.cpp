@@ -19,16 +19,18 @@
 #include "timer_operation.h"
 #include "web_server.h"
 #include "modbus_rtu.h"
-#include "sensor_handler.h"
-#include "serial_handler.h"
 #include "rtos_tasks.h"
 #include "nvs_config.h"
 #include "CT_counter.h"
+#include "CT_timer.h"
 #include "ui.h"
 
-// Global counter instances
+// Global counter/timer instances
 CT_counter* counter1 = nullptr;
 CT_counter* counter2 = nullptr;
+
+CT_timer* timer1 = nullptr;
+CT_timer* timer2 = nullptr;
 
 void setup() {
     Serial.begin(115200);
@@ -72,9 +74,6 @@ void setup() {
     digitalWrite(OUTPUT_CH2_PIN, LOW);
     Serial.printf("  Output pins: CH1=GPIO%d, CH2=GPIO%d\n", OUTPUT_CH1_PIN, OUTPUT_CH2_PIN);
     
-    // Sensor input pin
-    sensor_init();
-    
     // PCNT counter initialization
     esp_err_t ret = pcnt_init();
     if (ret != ESP_OK) {
@@ -88,7 +87,6 @@ void setup() {
     // =========================================================================
     Serial.println("[4/6] Initializing timers...");
     freq_timer_init();
-    stopwatch_timer_init();
     
     // =========================================================================
     // PHASE 5: Initialize communication interfaces
@@ -104,15 +102,23 @@ void setup() {
     nvs_config_apply(&storedConfig);
     
     // =========================================================================
-    // Create CT_counter instances
+    // Create CT_counter and CT_timer instances
     // =========================================================================
-    Serial.println("Creating CT_counter instances...");
+    Serial.println("Creating instances...");
     counter1 = new CT_counter(1);
     counter2 = new CT_counter(2);
+    
+    // Hardcoded for now. Would eventually be mapped to UI/NVS configs dynamically depending on Function mode.
+    timer1 = new CT_timer(1, COUNTER_CH1_PULSE_PIN, COUNTER_CH1_CTRL_PIN, OUTPUT_CH1_PIN);
+    timer2 = new CT_timer(2, COUNTER_CH2_PULSE_PIN, COUNTER_CH2_CTRL_PIN, OUTPUT_CH2_PIN);
     
     // Apply stored preset values
     counter1->setPresetValue(storedConfig.ch1_preset_value);
     counter2->setPresetValue(storedConfig.ch2_preset_value);
+    
+    // Activate timer instances for testing or setup config
+    timer1->enable();
+    timer2->enable();
     
     // =========================================================================
     // Start RTOS tasks
@@ -144,11 +150,7 @@ void setup() {
 
 void loop() {
     // Main loop runs on Core 1 with lowest priority
-    // Most work is done by RTOS tasks, but we keep serial handler here
-    // for debug convenience
-    
-    // Process serial commands (debug interface)
-    serial_handler_loop();
+    // Most work is done by RTOS tasks
     
     // Update the TFT display every 200ms
     static unsigned long last_ui_update = 0;

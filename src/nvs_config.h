@@ -11,7 +11,9 @@
 #define NVS_CONFIG_H
 
 #include <Arduino.h>
+#include "config.h"
 #include "CT_counter.h"
+#include "CT_timer.h"
 #include "input_config.h"
 
 // =============================================================================
@@ -20,16 +22,24 @@
 #define NVS_NAMESPACE       "ct_config"
 
 // Channel 1 keys
+#define NVS_CH1_FUNC        "ch1_func"
 #define NVS_CH1_MODE        "ch1_mode"
+#define NVS_CH1_OUT         "ch1_out"
 #define NVS_CH1_EDGE        "ch1_edge"
 #define NVS_CH1_PRESET      "ch1_preset"
 #define NVS_CH1_FILTER      "ch1_filter"
+#define NVS_CH1_TMODE       "ch1_tmode"
+#define NVS_CH1_TPRESET     "ch1_tpre"
 
 // Channel 2 keys
+#define NVS_CH2_FUNC        "ch2_func"
 #define NVS_CH2_MODE        "ch2_mode"
+#define NVS_CH2_OUT         "ch2_out"
 #define NVS_CH2_EDGE        "ch2_edge"
 #define NVS_CH2_PRESET      "ch2_preset"
 #define NVS_CH2_FILTER      "ch2_filter"
+#define NVS_CH2_TMODE       "ch2_tmode"
+#define NVS_CH2_TPRESET     "ch2_tpre"
 
 // System keys
 #define NVS_WIFI_SSID       "wifi_ssid"
@@ -42,16 +52,24 @@
 // =============================================================================
 typedef struct {
     // Channel 1 config
+    ChannelFunction ch1_function;
     InputMode ch1_input_mode;
+    OutputMode ch1_output_mode;
     EdgeMode ch1_edge_mode;
     int32_t ch1_preset_value;
     uint16_t ch1_filter;
+    TimerOutputMode ch1_timer_mode;
+    uint32_t ch1_timer_preset;
     
     // Channel 2 config
+    ChannelFunction ch2_function;
     InputMode ch2_input_mode;
+    OutputMode ch2_output_mode;
     EdgeMode ch2_edge_mode;
     int32_t ch2_preset_value;
     uint16_t ch2_filter;
+    TimerOutputMode ch2_timer_mode;
+    uint32_t ch2_timer_preset;
     
     // Modbus config
     uint8_t modbus_address;
@@ -62,7 +80,7 @@ typedef struct {
 } StoredConfig_t;
 
 // Current config version (increment when structure changes)
-#define CONFIG_VERSION 1
+#define CONFIG_VERSION 2
 
 // =============================================================================
 // FUNCTION DECLARATIONS

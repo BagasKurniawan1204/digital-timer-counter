@@ -51,16 +51,24 @@ void nvs_config_get_defaults(StoredConfig_t* config) {
     if (!config) return;
     
     // Channel 1 defaults
+    config->ch1_function = C_FUNCTION_COUNTER;
     config->ch1_input_mode = MODE_UP;
+    config->ch1_output_mode = OUTPUT_N;
     config->ch1_edge_mode = EDGE_RISING;
     config->ch1_preset_value = 10000;
     config->ch1_filter = 100;
+    config->ch1_timer_mode = TIMER_OND;
+    config->ch1_timer_preset = 1000;
     
     // Channel 2 defaults
+    config->ch2_function = C_FUNCTION_COUNTER;
     config->ch2_input_mode = MODE_UP;
+    config->ch2_output_mode = OUTPUT_N;
     config->ch2_edge_mode = EDGE_RISING;
     config->ch2_preset_value = 10000;
     config->ch2_filter = 100;
+    config->ch2_timer_mode = TIMER_OND;
+    config->ch2_timer_preset = 1000;
     
     // Modbus defaults
     config->modbus_address = MODBUS_SLAVE_ID;
@@ -90,16 +98,24 @@ bool nvs_config_load(StoredConfig_t* config) {
     }
     
     // Load Channel 1
+    config->ch1_function = (ChannelFunction)prefs.getUChar(NVS_CH1_FUNC, C_FUNCTION_COUNTER);
     config->ch1_input_mode = (InputMode)prefs.getUChar(NVS_CH1_MODE, MODE_UP);
+    config->ch1_output_mode = (OutputMode)prefs.getUChar(NVS_CH1_OUT, OUTPUT_N);
     config->ch1_edge_mode = (EdgeMode)prefs.getUChar(NVS_CH1_EDGE, EDGE_RISING);
     config->ch1_preset_value = prefs.getInt(NVS_CH1_PRESET, 10000);
     config->ch1_filter = prefs.getUShort(NVS_CH1_FILTER, 100);
+    config->ch1_timer_mode = (TimerOutputMode)prefs.getUChar(NVS_CH1_TMODE, TIMER_OND);
+    config->ch1_timer_preset = prefs.getUInt(NVS_CH1_TPRESET, 1000);
     
     // Load Channel 2
+    config->ch2_function = (ChannelFunction)prefs.getUChar(NVS_CH2_FUNC, C_FUNCTION_COUNTER);
     config->ch2_input_mode = (InputMode)prefs.getUChar(NVS_CH2_MODE, MODE_UP);
+    config->ch2_output_mode = (OutputMode)prefs.getUChar(NVS_CH2_OUT, OUTPUT_N);
     config->ch2_edge_mode = (EdgeMode)prefs.getUChar(NVS_CH2_EDGE, EDGE_RISING);
     config->ch2_preset_value = prefs.getInt(NVS_CH2_PRESET, 10000);
     config->ch2_filter = prefs.getUShort(NVS_CH2_FILTER, 100);
+    config->ch2_timer_mode = (TimerOutputMode)prefs.getUChar(NVS_CH2_TMODE, TIMER_OND);
+    config->ch2_timer_preset = prefs.getUInt(NVS_CH2_TPRESET, 1000);
     
     // Load Modbus
     config->modbus_address = prefs.getUChar(NVS_MODBUS_ADDR, MODBUS_SLAVE_ID);
@@ -132,16 +148,24 @@ bool nvs_config_save(const StoredConfig_t* config) {
     }
     
     // Save Channel 1
+    prefs.putUChar(NVS_CH1_FUNC, (uint8_t)config->ch1_function);
     prefs.putUChar(NVS_CH1_MODE, (uint8_t)config->ch1_input_mode);
+    prefs.putUChar(NVS_CH1_OUT, (uint8_t)config->ch1_output_mode);
     prefs.putUChar(NVS_CH1_EDGE, (uint8_t)config->ch1_edge_mode);
     prefs.putInt(NVS_CH1_PRESET, config->ch1_preset_value);
     prefs.putUShort(NVS_CH1_FILTER, config->ch1_filter);
+    prefs.putUChar(NVS_CH1_TMODE, (uint8_t)config->ch1_timer_mode);
+    prefs.putUInt(NVS_CH1_TPRESET, config->ch1_timer_preset);
     
     // Save Channel 2
+    prefs.putUChar(NVS_CH2_FUNC, (uint8_t)config->ch2_function);
     prefs.putUChar(NVS_CH2_MODE, (uint8_t)config->ch2_input_mode);
+    prefs.putUChar(NVS_CH2_OUT, (uint8_t)config->ch2_output_mode);
     prefs.putUChar(NVS_CH2_EDGE, (uint8_t)config->ch2_edge_mode);
     prefs.putInt(NVS_CH2_PRESET, config->ch2_preset_value);
     prefs.putUShort(NVS_CH2_FILTER, config->ch2_filter);
+    prefs.putUChar(NVS_CH2_TMODE, (uint8_t)config->ch2_timer_mode);
+    prefs.putUInt(NVS_CH2_TPRESET, config->ch2_timer_preset);
     
     // Save Modbus
     prefs.putUChar(NVS_MODBUS_ADDR, config->modbus_address);

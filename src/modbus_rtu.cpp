@@ -198,29 +198,7 @@ static uint16_t cb_SetCh2TargetHi(TRegister* reg, uint16_t val) {
 // -----------------------------------------------------------------------------
 // TIMER & SYSTEM CALLBACKS
 // -----------------------------------------------------------------------------
-static uint16_t cb_GetElapsedTimer(TRegister* reg, uint16_t val) {
-    return (uint16_t)(elapsed_ms & 0xFFFF);
-}
 
-static uint16_t cb_SetTimerEnable(TRegister* reg, uint16_t val) {
-    if (val > 1) return Modbus::EX_ILLEGAL_VALUE;
-    reg->value = val;
-    timer_enabled = (val == 1);
-    return Modbus::EX_SUCCESS;
-}
-
-static uint16_t cb_GetTimerEnable(TRegister* reg, uint16_t val) {
-    return timer_enabled ? 1 : 0;
-}
-
-static uint16_t cb_SetTimerReset(TRegister* reg, uint16_t val) {
-    if (val == 1) {
-        stopwatch_reset();
-        elapsed_ms = 0;
-        reg->value = 0; // Auto-reset register
-    }
-    return Modbus::EX_SUCCESS;
-}
 
 static uint16_t cb_GetOutputStatus(TRegister* reg, uint16_t val) {
     // Read the digital logic level of the output pins to report status
@@ -296,15 +274,9 @@ void modbus_init() {
     mb.onGet(HREG(MB_REG_CH2_TARGET_HI), cb_GetCh2TargetHi);
     mb.onSet(HREG(MB_REG_CH2_TARGET_HI), cb_SetCh2TargetHi);
 
-    // --- System & Timer Config ---
-    mb.onGet(HREG(MB_REG_ELAPSED_TIMER), cb_GetElapsedTimer);
-    mb.onSet(HREG(MB_REG_ELAPSED_TIMER), cb_ReadOnly);
-    
-    mb.onGet(HREG(MB_REG_TIMER_ENABLE), cb_GetTimerEnable);
-    mb.onSet(HREG(MB_REG_TIMER_ENABLE), cb_SetTimerEnable);
-    
-    mb.onGet(HREG(MB_REG_TIMER_RESET), cb_ReturnZero);
-    mb.onSet(HREG(MB_REG_TIMER_RESET), cb_SetTimerReset);
+    // --- System Config ---
+    mb.onGet(HREG(MB_REG_OUTPUT_STATUS), cb_GetOutputStatus);
+    mb.onSet(HREG(MB_REG_OUTPUT_STATUS), cb_ReadOnly);
 
     mb.onGet(HREG(MB_REG_OUTPUT_STATUS), cb_GetOutputStatus);
     mb.onSet(HREG(MB_REG_OUTPUT_STATUS), cb_ReadOnly);

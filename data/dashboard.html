@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <style>
+    .config-section { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 8px; }
+    .channel-box { display: inline-block; width: 45%; vertical-align: top; margin: 5px; padding: 10px; background: #fff; border-radius: 5px; }
+    .btn-small { padding: 5px 10px; font-size: 12px; margin: 2px; }
+    .output-on { color: #0f0; font-weight: bold; }
+    .output-off { color: #888; }
+    .status-value { font-family: monospace; font-size: 24px; }
+    .ch-label { font-weight: bold; font-size: 16px; color: #333; }
+    .nav-tabs { margin-bottom: 20px; }
+    .nav-tabs a { padding: 10px 20px; background: #ddd; text-decoration: none; border-radius: 5px; margin-right: 10px; color: #333; font-weight: bold; }
+    .nav-tabs a.active { background: #4CAF50; color: white; }
+    .hide { display: none; }
+  </style>
+</head>
+<body>
+  <h1>ESP32 HSC & Timer</h1>
+  
+  <div class="nav-tabs">
+    <a href="/dashboard.html" class="active">Dashboard</a>
+    <a href="/configuration.html">Configuration</a>
+  </div>
+
+  <div class="config-section">
+    <h2>System Status</h2>
+    <p>
+      <button class="button" onclick="apiCall('/counter/enable')">Global Enable</button>
+      <button class="button button2" onclick="apiCall('/counter/disable')">Global Disable</button>
+    </p>
+
+    <div class="channel-box" id="ch1-box">
+      <span class="ch-label">Channel 1</span> <span id="ch1-func-lbl"></span>
+      <p><button class="btn-small button2" onclick="apiCall('/counter/reset/1')">Reset CH1</button></p>
+      
+      <!-- Counter view -->
+      <div id="ch1-counter-view">
+        <p>Count: <span class="status-value" id="ch1-count">0</span></p>
+        <p>Freq: <span id="ch1-freq">0</span> Hz | Mode: <span id="ch1-mode">UP</span></p>
+        <p>Preset: <span id="ch1-preset-display">10000</span></p>
+      </div>
+
+      <!-- Timer view -->
+      <div id="ch1-timer-view" class="hide">
+        <p>Time Ms: <span class="status-value" id="ch1-time">0</span></p>
+        <p>Preset Time Ms: <span id="ch1-t-pre-display">0</span></p>
+      </div>
+      
+      <p>Output: <span id="ch1-output" class="output-off">OFF</span></p>
+    </div>
+
+    <div class="channel-box" id="ch2-box">
+      <span class="ch-label">Channel 2</span> <span id="ch2-func-lbl"></span>
+      <p><button class="btn-small button2" onclick="apiCall('/counter/reset/2')">Reset CH2</button></p>
+      
+      <!-- Counter view -->
+      <div id="ch2-counter-view">
+        <p>Count: <span class="status-value" id="ch2-count">0</span></p>
+        <p>Freq: <span id="ch2-freq">0</span> Hz | Mode: <span id="ch2-mode">UP</span></p>
+        <p>Preset: <span id="ch2-preset-display">10000</span></p>
+      </div>
+
+      <!-- Timer view -->
+      <div id="ch2-timer-view" class="hide">
+        <p>Time Ms: <span class="status-value" id="ch2-time">0</span></p>
+        <p>Preset Time Ms: <span id="ch2-t-pre-display">0</span></p>
+      </div>
+      
+      <p>Output: <span id="ch2-output" class="output-off">OFF</span></p>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <h2>System Info</h2>
+    <p>Uptime: <span id="sys-uptime">0</span> sec | Free Heap: <span id="sys-heap">-</span> bytes</p>
+  </div>
+
+  <script>
+  const socket = new WebSocket("ws://" + window.location.host + "/ws");
+  socket.addEventListener('message', (evt) => {
+    try {
+      const d = JSON.parse(evt.data);
+      
+      if(d.ch1_func !== undefined) {
+         document.getElementById("ch1-func-lbl").textContent = d.ch1_func == 1 ? "(Timer)" : "(Counter)";
+         document.getElementById("ch1-counter-view").className = d.ch1_func == 1 ? "hide" : "";
+         document.getElementById("ch1-timer-view").className = d.ch1_func == 1 ? "" : "hide";
+      }
+      if (d.ch1_count !== undefined) document.getElementById("ch1-count").textContent = d.ch1_count;
+      if (d.ch1_freq !== undefined) document.getElementById("ch1-freq").textContent = d.ch1_freq;
+      if (d.ch1_mode !== undefined) document.getElementById("ch1-mode").textContent = d.ch1_mode;
+      if (d.ch1_preset !== undefined) document.getElementById("ch1-preset-display").textContent = d.ch1_preset;
+      if (d.ch1_t_curr !== undefined) document.getElementById("ch1-time").textContent = d.ch1_t_curr;
+      if (d.ch1_t_pre !== undefined) document.getElementById("ch1-t-pre-display").textContent = d.ch1_t_pre;
+      if (d.ch1_out !== undefined) {
+        const el = document.getElementById("ch1-output");
+        el.textContent = d.ch1_out ? "ON" : "OFF";
+        el.className = d.ch1_out ? "output-on" : "output-off";
+      }
+      
+      if(d.ch2_func !== undefined) {
+         document.getElementById("ch2-func-lbl").textContent = d.ch2_func == 1 ? "(Timer)" : "(Counter)";
+         document.getElementById("ch2-counter-view").className = d.ch2_func == 1 ? "hide" : "";
+         document.getElementById("ch2-timer-view").className = d.ch2_func == 1 ? "" : "hide";
+      }
+      if (d.ch2_count !== undefined) document.getElementById("ch2-count").textContent = d.ch2_count;
+      if (d.ch2_freq !== undefined) document.getElementById("ch2-freq").textContent = d.ch2_freq;
+      if (d.ch2_mode !== undefined) document.getElementById("ch2-mode").textContent = d.ch2_mode;
+      if (d.ch2_preset !== undefined) document.getElementById("ch2-preset-display").textContent = d.ch2_preset;
+      if (d.ch2_t_curr !== undefined) document.getElementById("ch2-time").textContent = d.ch2_t_curr;
+      if (d.ch2_t_pre !== undefined) document.getElementById("ch2-t-pre-display").textContent = d.ch2_t_pre;
+      if (d.ch2_out !== undefined) {
+        const el = document.getElementById("ch2-output");
+        el.textContent = d.ch2_out ? "ON" : "OFF";
+        el.className = d.ch2_out ? "output-on" : "output-off";
+      }
+      
+      if (d.uptime !== undefined) document.getElementById("sys-uptime").textContent = d.uptime;
+      if (d.heap !== undefined) document.getElementById("sys-heap").textContent = d.heap;
+      
+    } catch(e) {}
+  });
+
+  async function apiCall(path) {
+    try {
+      await fetch(path, { cache: "no-store" });
+    } catch (e) {}
+  }
+  </script>
+</body>
+</html>

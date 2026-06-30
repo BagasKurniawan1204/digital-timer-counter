@@ -10,17 +10,25 @@
  */
 
 // =============================================================================
-// COUNTER CHANNEL 1 - High Speed Counter Input
+// CHANNEL MODES (TIMER OR COUNTER)
 // =============================================================================
-#define COUNTER_CH1_PULSE_PIN       34      // Input A (pulse input)
-#define COUNTER_CH1_CTRL_PIN        35      // Input B (direction/control)
+enum ChannelFunction {
+    C_FUNCTION_COUNTER,
+    C_FUNCTION_TIMER
+};
+
+// =============================================================================
+// COUNTER / TIMER CHANNEL 1 - High Speed Input
+// =============================================================================
+#define COUNTER_CH1_PULSE_PIN       34      // Input A (pulse / start timer)
+#define COUNTER_CH1_CTRL_PIN        35      // Input B (direction / pause timer)
 #define COUNTER_CH1_PCNT_UNIT       PCNT_UNIT_0
 
 // =============================================================================
-// COUNTER CHANNEL 2 - High Speed Counter Input
+// COUNTER / TIMER CHANNEL 2 - High Speed Input
 // =============================================================================
-#define COUNTER_CH2_PULSE_PIN       32      // Input A (pulse input)
-#define COUNTER_CH2_CTRL_PIN        33      // Input B (direction/control)
+#define COUNTER_CH2_PULSE_PIN       32      // Input A (pulse / start timer)
+#define COUNTER_CH2_CTRL_PIN        33      // Input B (direction / pause timer)
 #define COUNTER_CH2_PCNT_UNIT       PCNT_UNIT_1
 
 // =============================================================================
@@ -39,20 +47,11 @@
 #define MODBUS_BAUD_RATE            9600
 
 // =============================================================================
-// SENSOR INPUT
-// =============================================================================
-#define SENSOR_INPUT_PIN            15      // External sensor/trigger input (Changed from 14 to avoid TFT_DC conflict)
-#define SENSOR_DEBOUNCE_MS          20      // Debounce time in milliseconds
-
-// =============================================================================
 // TIMER CONFIGURATION
 // =============================================================================
 #define FREQ_TIMER_GROUP            TIMER_GROUP_0
 #define FREQ_TIMER_IDX              TIMER_0
-#define FREQ_MEASURE_INTERVAL_US    100000  // 100ms = 10Hz frequency measurement
-
-#define STOPWATCH_TIMER_GROUP       TIMER_GROUP_1
-#define STOPWATCH_TIMER_IDX         TIMER_0
+#define FREQ_MEASURE_INTERVAL_US    1000000 // 1s = 1Hz frequency measurement
 
 // Timer prescaler: 80MHz / 80 = 1MHz (1us ticks)
 #define TIMER_DIVIDER               80
@@ -131,14 +130,11 @@
 #define MB_REG_CH2_TARGET_LO        112     // Channel 2 Target Setpoint Low (RW)
 #define MB_REG_CH2_TARGET_HI        113     // Channel 2 Target Setpoint High (RW)
 
-// --- Timer & System Features ---
-#define MB_REG_ELAPSED_TIMER        114     // Elapsed Timer ms (RO)
-#define MB_REG_TIMER_ENABLE         115     // Timer Enable (RW)
-#define MB_REG_TIMER_RESET          116     // Timer Reset (WO)
-#define MB_REG_OUTPUT_STATUS        117     // Hardware Output Pin Status (RO)
-#define MB_REG_SYSTEM_REBOOT        118     // Reboot Command (WO: Write 0xAAAA)
+// --- System Features ---
+#define MB_REG_OUTPUT_STATUS        114     // Hardware Output Pin Status (RO)
+#define MB_REG_SYSTEM_REBOOT        115     // Reboot Command (WO: Write 0xAAAA)
 
-#define MB_REG_COUNT                19      // Total registers (100 to 118)
+#define MB_REG_COUNT                16      // Total registers (100 to 118)
 
 // =============================================================================
 // TODO: FUTURE MODBUS REGISTERS TO IMPLEMENT

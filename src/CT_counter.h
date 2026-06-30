@@ -23,7 +23,7 @@ enum InputMode {
     MODE_UDC    // Quadrature encoder (rotary encoder mode)
 };
 
-// Output mode enumeration (for future implementation)
+// Output mode enumeration
 enum OutputMode {
     OUTPUT_N,       // N output - normal output at count match
     OUTPUT_F,       // F output - one-shot pulse at count match

@@ -23,7 +23,9 @@ extern portMUX_TYPE pcnt_spinlock;
 extern bool counter_enabled;        // Master counter enable
 extern bool timer_enabled;          // Master timer enable
 extern bool continuous_mode;        // Continuous counting mode
-extern bool stopwatch_running;      // Stopwatch currently running
+#include "config.h"
+extern ChannelFunction ch1_function;
+extern ChannelFunction ch2_function;
 
 // =============================================================================
 // COUNTER CHANNEL 1 VARIABLES
@@ -46,6 +48,6 @@ extern volatile uint32_t s_ch2_error_count;     // Error counter
 // =============================================================================
 // TIMER VARIABLES
 // =============================================================================
-extern volatile uint32_t elapsed_ms;            // Stopwatch elapsed time in ms
+// Time-related state can be added here if needed
 
 #endif // GLOBALS_H

@@ -11,6 +11,13 @@
 #include "modbus_rtu.h"
 #include "web_server.h"
 #include "CT_counter.h"
+#include "CT_timer.h"
+
+// Externs for global instances initialized in main.cpp
+extern CT_counter* counter1;
+extern CT_counter* counter2;
+extern CT_timer* timer1;
+extern CT_timer* timer2;
 
 // =============================================================================
 // GLOBAL DEFINITIONS
@@ -104,26 +111,6 @@ void rtos_start_tasks() {
         CORE_REALTIME
     );
     
-    xTaskCreatePinnedToCore(
-        timerTask,
-        "Timer",
-        STACK_SIZE_TIMER,
-        NULL,
-        PRIORITY_TIMER,
-        &timerTaskHandle,
-        CORE_REALTIME
-    );
-    
-    xTaskCreatePinnedToCore(
-        inputTask,
-        "Input",
-        STACK_SIZE_INPUT,
-        NULL,
-        PRIORITY_INPUT,
-        &inputTaskHandle,
-        CORE_REALTIME
-    );
-    
     // =========================================================================
     // CORE 0 TASKS (Communication)
     // =========================================================================
@@ -181,6 +168,20 @@ void counterTask(void *pvParameters) {
             }
         }
         
+        // Process channel 1 based on function
+        if (ch1_function == C_FUNCTION_COUNTER) {
+            if (counter1) counter1->process();
+        } else if (ch1_function == C_FUNCTION_TIMER) {
+            if (timer1) timer1->process();
+        }
+        
+        // Process channel 2 based on function
+        if (ch2_function == C_FUNCTION_COUNTER) {
+            if (counter2) counter2->process();
+        } else if (ch2_function == C_FUNCTION_TIMER) {
+            if (timer2) timer2->process();
+        }
+        
         // Update current count values
         if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             // Read current counts from PCNT hardware (raw, used for frequency or raw tracking)
@@ -204,97 +205,13 @@ void counterTask(void *pvParameters) {
             lastFreqCalc = xTaskGetTickCount();
         }
         
-        // Process CT_counter instances (handles preset comparison & output)
-        CT_counter* ctr1 = getCounterInstance(1);
-        CT_counter* ctr2 = getCounterInstance(2);
-        if (ctr1) ctr1->process();
-        if (ctr2) ctr2->process();
-        
         // Run at 1ms interval
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(TASK_INTERVAL_COUNTER));
     }
 }
 
-/**
- * @brief Timer processing task
- */
-void timerTask(void *pvParameters) {
-    TickType_t lastWakeTime = xTaskGetTickCount();
-    
-    Serial.println("Timer Task: Started");
-    
-    for (;;) {
-        if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            if (systemData.timer.enabled && systemData.timer.running) {
-                // Get elapsed time from hardware timer
-                uint64_t elapsed_us = 0;
-                stopwatch_get_elapsed(&elapsed_us);
-                systemData.timer.elapsed_ms = (uint32_t)(elapsed_us / 1000ULL);
-                
-                // Also update the global for backwards compatibility
-                elapsed_ms = systemData.timer.elapsed_ms;
-                
-                xEventGroupSetBits(systemEvents, EVENT_TIMER_UPDATED);
-            }
-            xSemaphoreGive(dataMutex);
-        }
-        
-        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(10)); // 10ms interval
-    }
-}
 
-/**
- * @brief Input handling task (sensor debounce)
- */
-void inputTask(void *pvParameters) {
-    TickType_t lastWakeTime = xTaskGetTickCount();
-    
-    bool lastState = LOW;
-    uint32_t lastChangeTime = 0;
-    bool handledHigh = false;
-    
-    Serial.println("Input Task: Started");
-    
-    for (;;) {
-        // Only process when timer is enabled
-        bool timerEnabled = false;
-        if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            timerEnabled = systemData.timer.enabled;
-            xSemaphoreGive(dataMutex);
-        }
-        
-        if (timerEnabled) {
-            bool raw = digitalRead(SENSOR_INPUT_PIN);
-            uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
-            
-            if (raw != lastState) {
-                lastChangeTime = now;
-                lastState = raw;
-            } else if ((now - lastChangeTime) >= SENSOR_DEBOUNCE_MS) {
-                if (raw == HIGH && !handledHigh) {
-                    handledHigh = true;
-                    
-                    if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                        if (!systemData.timer.running) {
-                            stopwatch_start();
-                            systemData.timer.running = true;
-                            Serial.println("Input: Timer STARTED");
-                        } else {
-                            stopwatch_pause();
-                            systemData.timer.running = false;
-                            Serial.println("Input: Timer PAUSED");
-                        }
-                        xSemaphoreGive(dataMutex);
-                    }
-                } else if (raw == LOW && handledHigh) {
-                    handledHigh = false;
-                }
-            }
-        }
-        
-        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(5)); // 5ms interval
-    }
-}
+
 
 /**
  * @brief Modbus communication task

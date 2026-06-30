@@ -19,7 +19,8 @@ portMUX_TYPE pcnt_spinlock = portMUX_INITIALIZER_UNLOCKED;
 bool counter_enabled = true;
 bool timer_enabled = true;
 bool continuous_mode = false;
-bool stopwatch_running = false;
+ChannelFunction ch1_function = C_FUNCTION_COUNTER;
+ChannelFunction ch2_function = C_FUNCTION_COUNTER;
 
 // =============================================================================
 // COUNTER CHANNEL 1 VARIABLES
@@ -44,4 +45,4 @@ volatile bool s_ch2_new_freq_available = false;
 // =============================================================================
 // TIMER VARIABLES
 // =============================================================================
-volatile uint32_t elapsed_ms = 0;
+// Time-related state can be added here if needed

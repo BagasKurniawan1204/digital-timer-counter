@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 Configuration</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <style>
+    .config-section { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 8px; }
+    .channel-box { display: inline-block; width: 45%; vertical-align: top; margin: 5px; padding: 10px; background: #fff; border-radius: 5px; }
+    .form-row { margin: 8px 0; } 
+    .form-row label { display: inline-block; width: 120px; }
+    .form-row select, .form-row input { width: 120px; padding: 5px; }
+    .btn-small { padding: 5px 10px; font-size: 12px; margin: 2px; }
+    .ch-label { font-weight: bold; font-size: 16px; color: #333; }
+    #save-status { font-style: italic; color: #666; margin-left: 10px; }
+    .nav-tabs { margin-bottom: 20px; }
+    .nav-tabs a { padding: 10px 20px; background: #ddd; text-decoration: none; border-radius: 5px; margin-right: 10px; color: #333; font-weight: bold; }
+    .nav-tabs a.active { background: #4CAF50; color: white; }
+    .sub-section { border-top: 1px solid #ddd; margin-top: 10px; padding-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>ESP32 HSC & Timer</h1>
+  
+  <div class="nav-tabs">
+    <a href="/dashboard.html">Dashboard</a>
+    <a href="/configuration.html" class="active">Configuration</a>
+  </div>
+
+  <div class="config-section">
+    <h2>Channel Configuration</h2>
+    
+    <div class="channel-box">
+      <span class="ch-label">Channel 1</span>
+      
+      <div class="form-row">
+        <label>Function:</label>
+        <select id="cfg-ch1-func" onchange="chanFuncChanged(1)">
+          <option value="0">Counter</option>
+          <option value="1">Timer</option>
+        </select>
+        <button class="btn-small button" onclick="applyFunc(1)">Apply Func</button>
+      </div>
+
+      <div class="sub-section" id="cfg-ch1-counter">
+        <div class="form-row">
+          <label>C-Mode:</label>
+          <select id="cfg-ch1-mode">
+            <option value="UP">UP (Count Up)</option>
+            <option value="DN">DN (Count Down)</option>
+            <option value="UDA">UDA (Up/Down)</option>
+            <option value="UDC">UDC (Encoder)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>C-Output:</label>
+          <select id="cfg-ch1-out-mode">
+            <option value="N">N (Normal)</option>
+            <option value="F">F (One-Shot)</option>
+            <option value="C">C (Carry)</option>
+            <option value="NONE">NONE</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>C-Preset:</label>
+          <input type="number" id="cfg-ch1-preset" value="10000" min="0">
+        </div>
+        <div class="form-row">
+          <label>C-Edge:</label>
+          <select id="cfg-ch1-edge">
+            <option value="RISING">Rising</option>
+            <option value="FALLING">Falling</option>
+            <option value="BOTH">Both</option>
+          </select>
+        </div>
+        <button class="btn-small button" onclick="applyCounter(1)">Apply Counter</button>
+      </div>
+
+      <div class="sub-section" id="cfg-ch1-timer" style="display:none;">
+        <div class="form-row">
+          <label>T-Mode:</label>
+          <select id="cfg-ch1-t-mode">
+            <option value="OND">ON Delay</option>
+            <option value="FLK">Flicker</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>T-Preset (ms):</label>
+          <input type="number" id="cfg-ch1-t-preset" value="1000" min="0">
+        </div>
+        <button class="btn-small button" onclick="applyTimer(1)">Apply Timer</button>
+      </div>
+    </div>
+
+    <div class="channel-box">
+      <span class="ch-label">Channel 2</span>
+      
+      <div class="form-row">
+        <label>Function:</label>
+        <select id="cfg-ch2-func" onchange="chanFuncChanged(2)">
+          <option value="0">Counter</option>
+          <option value="1">Timer</option>
+        </select>
+        <button class="btn-small button" onclick="applyFunc(2)">Apply Func</button>
+      </div>
+
+      <div class="sub-section" id="cfg-ch2-counter">
+        <div class="form-row">
+          <label>C-Mode:</label>
+          <select id="cfg-ch2-mode">
+            <option value="UP">UP (Count Up)</option>
+            <option value="DN">DN (Count Down)</option>
+            <option value="UDA">UDA (Up/Down)</option>
+            <option value="UDC">UDC (Encoder)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>C-Output:</label>
+          <select id="cfg-ch2-out-mode">
+            <option value="N">N (Normal)</option>
+            <option value="F">F (One-Shot)</option>
+            <option value="C">C (Carry)</option>
+            <option value="NONE">NONE</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>C-Preset:</label>
+          <input type="number" id="cfg-ch2-preset" value="10000" min="0">
+        </div>
+        <div class="form-row">
+          <label>C-Edge:</label>
+          <select id="cfg-ch2-edge">
+            <option value="RISING">Rising</option>
+            <option value="FALLING">Falling</option>
+            <option value="BOTH">Both</option>
+          </select>
+        </div>
+        <button class="btn-small button" onclick="applyCounter(2)">Apply Counter</button>
+      </div>
+
+      <div class="sub-section" id="cfg-ch2-timer" style="display:none;">
+        <div class="form-row">
+          <label>T-Mode:</label>
+          <select id="cfg-ch2-t-mode">
+            <option value="OND">ON Delay</option>
+            <option value="FLK">Flicker</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>T-Preset (ms):</label>
+          <input type="number" id="cfg-ch2-t-preset" value="1000" min="0">
+        </div>
+        <button class="btn-small button" onclick="applyTimer(2)">Apply Timer</button>
+      </div>
+    </div>
+    
+    <p style="margin-top: 15px;">
+      <button class="button" onclick="apiCall('/config/save', true)">Save Config to Flash</button>
+      <button class="button button2" onclick="apiCall('/config/factory', true)">Factory Reset</button>
+      <span id="save-status"></span>
+    </p>
+
+  </div>
+
+  <!-- Modbus Config Section -->
+  <div class="config-section">
+    <h2>Modbus RTU Configuration</h2>
+    <div class="form-row">
+      <label>Slave ID:</label>
+      <input type="number" id="cfg-mb-addr" value="1" min="1" max="247">
+    </div>
+    <div class="form-row">
+      <label>Baudrate:</label>
+      <select id="cfg-mb-baud">
+        <option value="9600">9600</option>
+        <option value="19200">19200</option>
+        <option value="38400">38400</option>
+        <option value="57600">57600</option>
+        <option value="115200">115200</option>
+      </select>
+    </div>
+    <button class="btn-small button" onclick="applyModbus()">Apply Modbus</button>
+  </div>
+
+  <script>
+  function chanFuncChanged(ch) {
+      const val = document.getElementById("cfg-ch"+ch+"-func").value;
+      if (val == "1") {
+          document.getElementById("cfg-ch"+ch+"-counter").style.display = "none";
+          document.getElementById("cfg-ch"+ch+"-timer").style.display = "block";
+      } else {
+          document.getElementById("cfg-ch"+ch+"-counter").style.display = "block";
+          document.getElementById("cfg-ch"+ch+"-timer").style.display = "none";
+      }
+  }
+
+  async function apiCall(path, showStatus = false) {
+    try {
+      const res = await fetch(path, { cache: "no-store" });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const j = await res.json();
+      if (showStatus) {
+        document.getElementById("save-status").textContent = j.status || "OK";
+        setTimeout(() => document.getElementById("save-status").textContent = "", 3000);
+      }
+      return j;
+    } catch (e) {
+      console.error('API failed:', path, e);
+      if (showStatus) document.getElementById("save-status").textContent = "Error!";
+    }
+  }
+
+  function applyFunc(ch) {
+      let val = document.getElementById("cfg-ch"+ch+"-func").value;
+      apiCall("/config/ch"+ch+"/function?val=" + val, true);
+  }
+
+  function applyCounter(ch) {
+      let mode = document.getElementById("cfg-ch"+ch+"-mode").value;
+      let outMode = document.getElementById("cfg-ch"+ch+"-out-mode").value;
+      let edge = document.getElementById("cfg-ch"+ch+"-edge").value;
+      let preset = document.getElementById("cfg-ch"+ch+"-preset").value;
+      apiCall("/config/ch"+ch+"?mode=" + mode + "&out=" + outMode + "&edge=" + edge + "&preset=" + preset, true);
+  }
+
+  function applyModbus() {
+      let addr = document.getElementById("cfg-mb-addr").value;
+      let baud = document.getElementById("cfg-mb-baud").value;
+      apiCall("/config/modbus?addr=" + addr + "&baud=" + baud, true);
+  }
+
+  function applyTimer(ch) {
+      let mode = document.getElementById("cfg-ch"+ch+"-t-mode").value;
+      let preset = document.getElementById("cfg-ch"+ch+"-t-preset").value;
+      apiCall("/config/timer"+ch+"?mode=" + mode + "&preset=" + preset, true);
+  }
+
+  const socket = new WebSocket("ws://" + window.location.host + "/ws");
+  socket.addEventListener('message', (evt) => {
+    try {
+      const d = JSON.parse(evt.data);
+      
+      if(d.ch1_func !== undefined) {
+         if(document.activeElement.id !== "cfg-ch1-func") {
+             document.getElementById("cfg-ch1-func").value = d.ch1_func;
+             chanFuncChanged(1);
+         }
+      }
+      
+      if(d.ch2_func !== undefined) {
+         if(document.activeElement.id !== "cfg-ch2-func") {
+             document.getElementById("cfg-ch2-func").value = d.ch2_func;
+             chanFuncChanged(2);
+         }
+      }
+
+      if (d.ch1_preset !== undefined && document.activeElement.id !== "cfg-ch1-preset") 
+        document.getElementById("cfg-ch1-preset").value = d.ch1_preset;
+      
+      if (d.ch2_preset !== undefined && document.activeElement.id !== "cfg-ch2-preset") 
+        document.getElementById("cfg-ch2-preset").value = d.ch2_preset;
+
+      if (d.ch1_t_pre !== undefined && document.activeElement.id !== "cfg-ch1-t-preset") 
+        document.getElementById("cfg-ch1-t-preset").value = d.ch1_t_pre;
+
+      if (d.ch2_t_pre !== undefined && document.activeElement.id !== "cfg-ch2-t-preset") 
+        document.getElementById("cfg-ch2-t-preset").value = d.ch2_t_pre;
+        
+    } catch(e) {}
+  });
+
+  // Fetch init configs
+  fetch("/config/get").then(res=>res.json()).then(d => {
+       if (d.ch1_func !== undefined) document.getElementById("cfg-ch1-func").value = d.ch1_func;
+       if (d.ch1_mode !== undefined) document.getElementById("cfg-ch1-mode").value = d.ch1_mode;
+       if (d.ch1_out !== undefined) document.getElementById("cfg-ch1-out-mode").value = d.ch1_out;
+       if (d.ch1_edge !== undefined) document.getElementById("cfg-ch1-edge").value = d.ch1_edge;
+       if (d.ch1_preset !== undefined) document.getElementById("cfg-ch1-preset").value = d.ch1_preset;
+       
+       if (d.ch2_func !== undefined) document.getElementById("cfg-ch2-func").value = d.ch2_func;
+       if (d.ch2_mode !== undefined) document.getElementById("cfg-ch2-mode").value = d.ch2_mode;
+       if (d.ch2_out !== undefined) document.getElementById("cfg-ch2-out-mode").value = d.ch2_out;
+       if (d.ch2_edge !== undefined) document.getElementById("cfg-ch2-edge").value = d.ch2_edge;
+       if (d.ch2_preset !== undefined) document.getElementById("cfg-ch2-preset").value = d.ch2_preset;
+       
+       if (d.ch1_t_mode !== undefined) document.getElementById("cfg-ch1-t-mode").value = d.ch1_t_mode;
+       if (d.ch1_t_pre !== undefined) document.getElementById("cfg-ch1-t-preset").value = d.ch1_t_pre;
+       if (d.ch2_t_mode !== undefined) document.getElementById("cfg-ch2-t-mode").value = d.ch2_t_mode;
+       if (d.ch2_t_pre !== undefined) document.getElementById("cfg-ch2-t-preset").value = d.ch2_t_pre;
+       
+       if (d.mb_addr !== undefined) document.getElementById("cfg-mb-addr").value = d.mb_addr;
+       if (d.mb_baud !== undefined) document.getElementById("cfg-mb-baud").value = d.mb_baud;
+       
+       chanFuncChanged(1);
+       chanFuncChanged(2);
+  });
+  </script>
+</body>
+</html>
