@@ -44,6 +44,12 @@
         <button class="btn-small" id="btn-ch1-plus">+</button>
         <button class="btn-small" id="btn-ch1-minus">-</button>
       </p>
+      <p>
+        Relay:
+        <button class="btn-small button" id="btn-ch1-out-on">ON</button>
+        <button class="btn-small button2" id="btn-ch1-out-off">OFF</button>
+        <button class="btn-small" id="btn-ch1-out-auto">AUTO</button>
+      </p>
     </div>
 
     <div class="channel-box">
@@ -57,6 +63,12 @@
         Manual:
         <button class="btn-small" id="btn-ch2-plus">+</button>
         <button class="btn-small" id="btn-ch2-minus">-</button>
+      </p>
+      <p>
+        Relay:
+        <button class="btn-small button" id="btn-ch2-out-on">ON</button>
+        <button class="btn-small button2" id="btn-ch2-out-off">OFF</button>
+        <button class="btn-small" id="btn-ch2-out-auto">AUTO</button>
       </p>
     </div>
   </div>
@@ -226,6 +238,12 @@
   document.getElementById('btn-ch1-minus').onclick = () => apiCall('/counter/manual/1/minus');
   document.getElementById('btn-ch2-plus').onclick = () => apiCall('/counter/manual/2/plus');
   document.getElementById('btn-ch2-minus').onclick = () => apiCall('/counter/manual/2/minus');
+  document.getElementById('btn-ch1-out-on').onclick = () => apiCall('/output/1/on');
+  document.getElementById('btn-ch1-out-off').onclick = () => apiCall('/output/1/off');
+  document.getElementById('btn-ch1-out-auto').onclick = () => apiCall('/output/1/auto');
+  document.getElementById('btn-ch2-out-on').onclick = () => apiCall('/output/2/on');
+  document.getElementById('btn-ch2-out-off').onclick = () => apiCall('/output/2/off');
+  document.getElementById('btn-ch2-out-auto').onclick = () => apiCall('/output/2/auto');
 
   // --- Timer controls ---
   document.getElementById('btn-timer-enable').onclick = () => apiCall('/timer/enable');

@@ -48,6 +48,8 @@ private:
     CounterConfig _config;      // Counter configuration
     bool _enabled;              // Counter enable state
     bool _output_state;         // Current output state
+    bool _manual_output_override; // Manual relay override active
+    bool _manual_output_state;    // Forced relay state while overridden
 
 public:
     CT_counter(uint8_t channel);
@@ -65,6 +67,8 @@ public:
     void inhibit(bool state);
     void manualIncrement();
     void manualDecrement();
+    void setManualOutputState(bool state);
+    void clearManualOutputOverride();
     
     // Getters
     int32_t getCurrentValue();

@@ -41,6 +41,8 @@ CT_counter::CT_counter(uint8_t channel) : _channel(channel) {
     
     _enabled = false;
     _output_state = false;
+    _manual_output_override = false;
+    _manual_output_state = false;
     
     // Register global instance
     g_counter_instances[_channel - 1] = this;
@@ -147,6 +149,8 @@ void CT_counter::reset() {
     
     _config.current_value = 0;
     _output_state = false;
+    _manual_output_override = false;
+    _manual_output_state = false;
     
     // Turn off output pin
     uint8_t output_pin = (_channel == 1) ? OUTPUT_CH1_PIN : OUTPUT_CH2_PIN;
@@ -191,6 +195,30 @@ void CT_counter::manualDecrement() {
         pcnt_ch2_manual_decrement(1);
     }
     process(); // Re-evaluate output state
+}
+
+void CT_counter::setManualOutputState(bool state) {
+    _manual_output_override = true;
+    _manual_output_state = state;
+    _output_state = state;
+
+    uint8_t output_pin = (_channel == 1) ? OUTPUT_CH1_PIN : OUTPUT_CH2_PIN;
+    digitalWrite(output_pin, state ? HIGH : LOW);
+
+    if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        systemData.channel[_channel - 1].output_state = state;
+        xSemaphoreGive(dataMutex);
+    }
+
+    Serial.printf("[CT_counter] CH%d manual output forced %s\n", 
+                  _channel, state ? "ON" : "OFF");
+}
+
+void CT_counter::clearManualOutputOverride() {
+    _manual_output_override = false;
+    process();
+
+    Serial.printf("[CT_counter] CH%d manual output override cleared\n", _channel);
 }
 
 // =============================================================================
@@ -249,6 +277,18 @@ void CT_counter::process() {
     
     uint8_t output_pin = (_channel == 1) ? OUTPUT_CH1_PIN : OUTPUT_CH2_PIN;
     bool previous_output = _output_state;
+
+    if (_manual_output_override) {
+        _output_state = _manual_output_state;
+        digitalWrite(output_pin, _output_state ? HIGH : LOW);
+
+        if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            systemData.channel[_channel - 1].current_value = current;
+            systemData.channel[_channel - 1].output_state = _output_state;
+            xSemaphoreGive(dataMutex);
+        }
+        return;
+    }
     
     // Check preset condition based on counting direction
     bool preset_reached = false;

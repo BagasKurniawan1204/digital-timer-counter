@@ -68,6 +68,10 @@ static uint16_t cb_GetCh1Frequency(TRegister* reg, uint16_t val) {
     return (uint16_t)s_ch1_frequency_hz;
 }
 
+static uint16_t cb_GetCh1FrequencyHi(TRegister* reg, uint16_t val) {
+    return (uint16_t)(((uint32_t)s_ch1_frequency_hz >> 16) & 0xFFFF);
+}
+
 static uint16_t cb_SetCh1Reset(TRegister* reg, uint16_t val) {
     if (val == 1) {
         pcnt_ch1_reset();
@@ -136,6 +140,10 @@ static uint16_t cb_GetCh2CountHi(TRegister* reg, uint16_t val) {
 
 static uint16_t cb_GetCh2Frequency(TRegister* reg, uint16_t val) {
     return (uint16_t)s_ch2_frequency_hz;
+}
+
+static uint16_t cb_GetCh2FrequencyHi(TRegister* reg, uint16_t val) {
+    return (uint16_t)(((uint32_t)s_ch2_frequency_hz >> 16) & 0xFFFF);
 }
 
 static uint16_t cb_SetCh2Reset(TRegister* reg, uint16_t val) {
@@ -259,8 +267,11 @@ void modbus_init() {
     mb.onGet(HREG(MB_REG_CH1_COUNT_HI), cb_GetCh1CountHi);
     mb.onSet(HREG(MB_REG_CH1_COUNT_HI), cb_ReadOnly);
     
-    mb.onGet(HREG(MB_REG_CH1_FREQUENCY), cb_GetCh1Frequency);
-    mb.onSet(HREG(MB_REG_CH1_FREQUENCY), cb_ReadOnly);
+    mb.onGet(HREG(MB_REG_CH1_FREQUENCY_HI), cb_GetCh1FrequencyHi);
+    mb.onSet(HREG(MB_REG_CH1_FREQUENCY_HI), cb_ReadOnly);
+
+    mb.onGet(HREG(MB_REG_CH1_FREQUENCY_LO), cb_GetCh1Frequency);
+    mb.onSet(HREG(MB_REG_CH1_FREQUENCY_LO), cb_ReadOnly);
     
     mb.onGet(HREG(MB_REG_CH1_RESET), cb_ReturnZero);
     mb.onSet(HREG(MB_REG_CH1_RESET), cb_SetCh1Reset);
@@ -281,8 +292,11 @@ void modbus_init() {
     mb.onGet(HREG(MB_REG_CH2_COUNT_HI), cb_GetCh2CountHi);
     mb.onSet(HREG(MB_REG_CH2_COUNT_HI), cb_ReadOnly);
     
-    mb.onGet(HREG(MB_REG_CH2_FREQUENCY), cb_GetCh2Frequency);
-    mb.onSet(HREG(MB_REG_CH2_FREQUENCY), cb_ReadOnly);
+    mb.onGet(HREG(MB_REG_CH2_FREQUENCY_HI), cb_GetCh2FrequencyHi);
+    mb.onSet(HREG(MB_REG_CH2_FREQUENCY_HI), cb_ReadOnly);
+
+    mb.onGet(HREG(MB_REG_CH2_FREQUENCY_LO), cb_GetCh2Frequency);
+    mb.onSet(HREG(MB_REG_CH2_FREQUENCY_LO), cb_ReadOnly);
     
     mb.onGet(HREG(MB_REG_CH2_RESET), cb_ReturnZero);
     mb.onSet(HREG(MB_REG_CH2_RESET), cb_SetCh2Reset);

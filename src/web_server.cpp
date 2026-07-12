@@ -207,6 +207,19 @@ void web_server_init() {
         request->send(200, "application/json", "{\"status\":\"reset\"}");
         ws.textAll(make_state_json());
     });
+
+    auto handle_manual_output = [](AsyncWebServerRequest *request, uint8_t channel, const char *state) {
+        CT_counter* ctr = getCounterInstance(channel);
+        if (ctr) {
+            if (strcmp(state, "auto") == 0) {
+                ctr->clearManualOutputOverride();
+            } else {
+                ctr->setManualOutputState(strcmp(state, "on") == 0);
+            }
+        }
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+        ws.textAll(make_state_json());
+    };
      
     // Manual counter controls
     server.on("/counter/manual/1/plus", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -235,6 +248,27 @@ void web_server_init() {
         if (ctr) ctr->manualDecrement();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
         ws.textAll(make_state_json());
+    });
+
+    // Manual relay/output controls for testing
+    server.on("/output/1/on", HTTP_GET, [handle_manual_output](AsyncWebServerRequest *request) {
+        handle_manual_output(request, 1, "on");
+    });
+    server.on("/output/1/off", HTTP_GET, [handle_manual_output](AsyncWebServerRequest *request) {
+        handle_manual_output(request, 1, "off");
+    });
+    server.on("/output/1/auto", HTTP_GET, [handle_manual_output](AsyncWebServerRequest *request) {
+        handle_manual_output(request, 1, "auto");
+    });
+
+    server.on("/output/2/on", HTTP_GET, [handle_manual_output](AsyncWebServerRequest *request) {
+        handle_manual_output(request, 2, "on");
+    });
+    server.on("/output/2/off", HTTP_GET, [handle_manual_output](AsyncWebServerRequest *request) {
+        handle_manual_output(request, 2, "off");
+    });
+    server.on("/output/2/auto", HTTP_GET, [handle_manual_output](AsyncWebServerRequest *request) {
+        handle_manual_output(request, 2, "auto");
     });
     
     // =========================================================================

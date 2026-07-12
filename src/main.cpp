@@ -157,8 +157,8 @@ void loop() {
         // Ensure counters are instantiated before querying
         if (counter1 != nullptr && counter2 != nullptr) {
             ui_update_counter(
-                counter1->getCurrentValue(), counter1->getPresetValue(),
-                counter2->getCurrentValue(), counter2->getPresetValue()
+                counter1->getCurrentValue(), counter1->getPresetValue(), s_ch1_frequency_hz,
+                counter2->getCurrentValue(), counter2->getPresetValue(), s_ch2_frequency_hz
             );
         }
     }

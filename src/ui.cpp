@@ -3,6 +3,13 @@
 // TFT instance
 TFT_eSPI tft = TFT_eSPI();
 
+static void draw_value_field(int16_t x, int16_t y, int32_t value) {
+    char buffer[16];
+    snprintf(buffer, sizeof(buffer), "%-7ld", (long)value);
+    tft.fillRect(x, y, tft.width() - x, 18, TFT_BLACK);
+    tft.drawString(buffer, x, y, 2);
+}
+
 void ui_init() {
     pinMode(14, OUTPUT);
     pinMode(13, OUTPUT);
@@ -26,30 +33,27 @@ void ui_init() {
     // Counter 1 labels
     tft.drawString("Current:", 20, 80, 2);
     tft.drawString("Preset :", 20, 110, 2);
+    tft.drawString("Freq (Hz) :", 20, 140, 2);
     
     // Counter 2 labels
     tft.drawString("Current:", 180, 80, 2);
     tft.drawString("Preset :", 180, 110, 2);
+    tft.drawString("Freq (Hz) :", 180, 140, 2);
 }
 
-void ui_update_counter(int32_t counter1_current, int32_t counter1_preset, int32_t counter2_current, int32_t counter2_preset) {
+void ui_update_counter(int32_t counter1_current, int32_t counter1_preset, int32_t counter1_frequency,
+                       int32_t counter2_current, int32_t counter2_preset, int32_t counter2_frequency) {
     tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    
-    char buffer[16];
 
     // Update Counter 1 (pad with spaces to overwrite old text)
-    snprintf(buffer, sizeof(buffer), "%-7ld", (long)counter1_current);
-    tft.drawString(buffer, 85, 80, 2);
-    
-    snprintf(buffer, sizeof(buffer), "%-7ld", (long)counter1_preset);
-    tft.drawString(buffer, 85, 110, 2);
+    draw_value_field(100, 80, counter1_current);
+    draw_value_field(100, 110, counter1_preset);
+    draw_value_field(100, 140, counter1_frequency);
 
     // Update Counter 2
-    snprintf(buffer, sizeof(buffer), "%-7ld", (long)counter2_current);
-    tft.drawString(buffer, 245, 80, 2);
-    
-    snprintf(buffer, sizeof(buffer), "%-7ld", (long)counter2_preset);
-    tft.drawString(buffer, 245, 110, 2);
+    draw_value_field(260, 80, counter2_current);
+    draw_value_field(260, 110, counter2_preset);
+    draw_value_field(260, 140, counter2_frequency);
 }
 
 void ui_calibrate_touch() {

@@ -114,31 +114,33 @@
 // Holding Registers (Read/Write where applicable)
 
 // --- Channel 1 ---
-#define MB_REG_CH1_COUNT_LO         100     // Channel 1 Count Lower Word (RO)
-#define MB_REG_CH1_COUNT_HI         101     // Channel 1 Count Upper Word (RO)
-#define MB_REG_CH1_FREQUENCY        102     // Channel 1 Frequency Hz (RO)
-#define MB_REG_CH1_RESET            103     // Channel 1 Reset (WO)
-#define MB_REG_CH1_MODE             104     // Channel 1 Input Mode (RW: 0=UP, 1=DN, 2=UDA, 3=UDC)
-#define MB_REG_CH1_TARGET_LO        105     // Channel 1 Target Setpoint Low (RW)
-#define MB_REG_CH1_TARGET_HI        106     // Channel 1 Target Setpoint High (RW)
+#define MB_REG_CH1_COUNT_HI         100     // Channel 1 Count Upper Word (RO)
+#define MB_REG_CH1_COUNT_LO         101     // Channel 1 Count Lower Word (RO)
+#define MB_REG_CH1_FREQUENCY_HI     102     // Channel 1 Frequency Hz Upper Word (RO)
+#define MB_REG_CH1_FREQUENCY_LO     103     // Channel 1 Frequency Hz Lower Word (RO)
+#define MB_REG_CH1_RESET            104     // Channel 1 Reset (WO)
+#define MB_REG_CH1_MODE             105     // Channel 1 Input Mode (RW: 0=UP, 1=DN, 2=UDA, 3=UDC)
+#define MB_REG_CH1_TARGET_LO        106     // Channel 1 Target Setpoint Low (RW)
+#define MB_REG_CH1_TARGET_HI        107     // Channel 1 Target Setpoint High (RW)
 
 // --- Channel 2 ---
-#define MB_REG_CH2_COUNT_LO         107     // Channel 2 Count Lower Word (RO)
 #define MB_REG_CH2_COUNT_HI         108     // Channel 2 Count Upper Word (RO)
-#define MB_REG_CH2_FREQUENCY        109     // Channel 2 Frequency Hz (RO)
-#define MB_REG_CH2_RESET            110     // Channel 2 Reset (WO)
-#define MB_REG_CH2_MODE             111     // Channel 2 Input Mode (RW: 0=UP, 1=DN, 2=UDA, 3=UDC)
-#define MB_REG_CH2_TARGET_LO        112     // Channel 2 Target Setpoint Low (RW)
-#define MB_REG_CH2_TARGET_HI        113     // Channel 2 Target Setpoint High (RW)
+#define MB_REG_CH2_COUNT_LO         109     // Channel 2 Count Lower Word (RO)
+#define MB_REG_CH2_FREQUENCY_HI     110     // Channel 2 Frequency Hz Upper Word (RO)
+#define MB_REG_CH2_FREQUENCY_LO     111     // Channel 2 Frequency Hz Lower Word (RO)
+#define MB_REG_CH2_RESET            112     // Channel 2 Reset (WO)
+#define MB_REG_CH2_MODE             113     // Channel 2 Input Mode (RW: 0=UP, 1=DN, 2=UDA, 3=UDC)
+#define MB_REG_CH2_TARGET_LO        114     // Channel 2 Target Setpoint Low (RW)
+#define MB_REG_CH2_TARGET_HI        115     // Channel 2 Target Setpoint High (RW)
 
 // --- Timer & System Features ---
-#define MB_REG_ELAPSED_TIMER        114     // Elapsed Timer ms (RO)
-#define MB_REG_TIMER_ENABLE         115     // Timer Enable (RW)
-#define MB_REG_TIMER_RESET          116     // Timer Reset (WO)
-#define MB_REG_OUTPUT_STATUS        117     // Hardware Output Pin Status (RO)
-#define MB_REG_SYSTEM_REBOOT        118     // Reboot Command (WO: Write 0xAAAA)
+#define MB_REG_ELAPSED_TIMER        116     // Elapsed Timer ms (RO)
+#define MB_REG_TIMER_ENABLE         117     // Timer Enable (RW)
+#define MB_REG_TIMER_RESET          118     // Timer Reset (WO)
+#define MB_REG_OUTPUT_STATUS        119     // Hardware Output Pin Status (RO)
+#define MB_REG_SYSTEM_REBOOT        120     // Reboot Command (WO: Write 0xAAAA)
 
-#define MB_REG_COUNT                19      // Total registers (100 to 118)
+#define MB_REG_COUNT                21      // Total registers (100 to 120)
 
 // =============================================================================
 // TODO: FUTURE MODBUS REGISTERS TO IMPLEMENT
