@@ -10,11 +10,22 @@ static void draw_value_field(int16_t x, int16_t y, int32_t value) {
     tft.drawString(buffer, x, y, 2);
 }
 
+static void draw_output_indicator(int16_t x, int16_t y, bool active, const char *label) {
+    const uint16_t width = 60;
+    const uint16_t height = 18;
+
+    tft.fillRect(x, y, width, height, TFT_BLACK);
+    if (active) {
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        tft.drawString(label, x, y, 2);
+    }
+}
+
 void ui_init() {
     pinMode(14, OUTPUT);
     pinMode(13, OUTPUT);
     tft.init();
-    tft.setRotation(1); // Set landscape
+    tft.setRotation(3); // Set landscape
     tft.fillScreen(TFT_BLACK);
     
     // Header
@@ -54,6 +65,10 @@ void ui_update_counter(int32_t counter1_current, int32_t counter1_preset, int32_
     draw_value_field(260, 80, counter2_current);
     draw_value_field(260, 110, counter2_preset);
     draw_value_field(260, 140, counter2_frequency);
+
+    // Show output indicators only while the threshold condition is met.
+    draw_output_indicator(20, 210, counter1_current >= counter1_preset, "OUT1");
+    draw_output_indicator(260, 210, counter2_current >= counter2_preset, "OUT2");
 }
 
 void ui_calibrate_touch() {
