@@ -258,7 +258,7 @@ void modbus_init() {
     mb.slave(MODBUS_SLAVE_ID);
     
     // Add all holding registers
-    mb.addHreg(MB_REG_CH1_COUNT_LO, 0, MB_REG_COUNT);
+    mb.addHreg(MB_REG_CH1_COUNT_HI, 0, MB_REG_COUNT);
     
     // --- Channel 1 Config ---
     mb.onGet(HREG(MB_REG_CH1_COUNT_LO), cb_GetCh1CountLo);
