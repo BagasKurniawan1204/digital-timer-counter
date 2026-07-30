@@ -104,6 +104,8 @@ void counter_timer_init() {
     
     // Add ISR callback
     timer_isr_callback_add(COUNTER_TIMER_GROUP, COUNTER_TIMER_IDX, timer_isr_counter_handler, NULL, 0);
+
+    timer_start(COUNTER_TIMER_GROUP, COUNTER_TIMER_IDX);
     
     Serial.println("Counter timer initialized");
 }
