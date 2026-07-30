@@ -8,6 +8,39 @@
 #include "globals.h"
 #include "counter_operation.h"
 
+namespace {
+enum class TriggerTimerState : uint8_t { Idle, Timing, RelayOn };
+portMUX_TYPE s_trigger_timer_mux = portMUX_INITIALIZER_UNLOCKED;
+volatile bool s_pulse_pending = false;
+volatile bool s_ctrl_pending = false;
+volatile unsigned long s_pulse_ms = 0;
+volatile unsigned long s_ctrl_ms = 0;
+TriggerTimerConfig s_trigger_config = {5000UL, 2000UL, TIMER_OFF_BY_DELAY};
+TriggerTimerState s_trigger_state = TriggerTimerState::Idle;
+unsigned long s_timer_start_ms = 0;
+unsigned long s_relay_start_ms = 0;
+bool s_relay_on = false;
+
+void set_timer_relay(bool on) {
+    s_relay_on = on;
+    digitalWrite(TIMER_RELAY_PIN, on ? HIGH : LOW);
+}
+
+void IRAM_ATTR timer_pulse_isr() {
+    portENTER_CRITICAL_ISR(&s_trigger_timer_mux);
+    s_pulse_ms = millis();
+    s_pulse_pending = true;
+    portEXIT_CRITICAL_ISR(&s_trigger_timer_mux);
+}
+
+void IRAM_ATTR timer_ctrl_isr() {
+    portENTER_CRITICAL_ISR(&s_trigger_timer_mux);
+    s_ctrl_ms = millis();
+    s_ctrl_pending = true;
+    portEXIT_CRITICAL_ISR(&s_trigger_timer_mux);
+}
+}  // namespace
+
 // =============================================================================
 // TIMER ISR HANDLER
 // =============================================================================
@@ -115,4 +148,94 @@ void stopwatch_reset() {
 
 void stopwatch_get_elapsed(uint64_t *elapsed_us) {
     timer_get_counter_value(STOPWATCH_TIMER_GROUP, STOPWATCH_TIMER_IDX, elapsed_us);
+}
+
+void trigger_timer_init() {
+    pinMode(TIMER_RELAY_PIN, OUTPUT);
+    set_timer_relay(false);
+    // GPIO34/35 require external pull-up/down resistors.
+    pinMode(COUNTER_CH1_PULSE_PIN, INPUT);
+    pinMode(COUNTER_CH1_CTRL_PIN, INPUT);
+    attachInterrupt(digitalPinToInterrupt(COUNTER_CH1_PULSE_PIN), timer_pulse_isr, RISING);
+    attachInterrupt(digitalPinToInterrupt(COUNTER_CH1_CTRL_PIN), timer_ctrl_isr, RISING);
+    Serial.printf("Trigger timer: PULSE=GPIO%d CTRL=GPIO%d relay=GPIO%d\n",
+                  COUNTER_CH1_PULSE_PIN, COUNTER_CH1_CTRL_PIN, TIMER_RELAY_PIN);
+}
+
+void trigger_timer_set_config(const TriggerTimerConfig &config) {
+    TriggerTimerConfig safe = config;
+    if (safe.durationMs < 100UL) safe.durationMs = 100UL;
+    if (safe.delayOffMs < 100UL) safe.delayOffMs = 100UL;
+    if (safe.offMode != TIMER_OFF_BY_CTRL && safe.offMode != TIMER_OFF_BY_DELAY) safe.offMode = TIMER_OFF_BY_DELAY;
+    portENTER_CRITICAL(&s_trigger_timer_mux);
+    s_trigger_config = safe;
+    portEXIT_CRITICAL(&s_trigger_timer_mux);
+}
+
+TriggerTimerConfig trigger_timer_get_config() {
+    TriggerTimerConfig config;
+    portENTER_CRITICAL(&s_trigger_timer_mux);
+    config = s_trigger_config;
+    portEXIT_CRITICAL(&s_trigger_timer_mux);
+    return config;
+}
+
+TriggerTimerStatus trigger_timer_get_status() {
+    TriggerTimerStatus status;
+    const unsigned long now = millis();
+    portENTER_CRITICAL(&s_trigger_timer_mux);
+    status.running = s_trigger_state == TriggerTimerState::Timing;
+    status.relayOn = s_relay_on;
+    status.elapsedMs = status.running ? now - s_timer_start_ms : 0;
+    portEXIT_CRITICAL(&s_trigger_timer_mux);
+    return status;
+}
+
+void trigger_timer_process() {
+    bool pulse;
+    bool ctrl;
+    unsigned long pulseMs;
+    unsigned long ctrlMs;
+    TriggerTimerConfig config;
+    portENTER_CRITICAL(&s_trigger_timer_mux);
+    pulse = s_pulse_pending;
+    ctrl = s_ctrl_pending;
+    pulseMs = s_pulse_ms;
+    ctrlMs = s_ctrl_ms;
+    s_pulse_pending = false;
+    s_ctrl_pending = false;
+    config = s_trigger_config;
+    portEXIT_CRITICAL(&s_trigger_timer_mux);
+
+    if (!timer_enabled) {
+        s_trigger_state = TriggerTimerState::Idle;
+        set_timer_relay(false);
+        return;
+    }
+    if (pulse) {
+        s_trigger_state = TriggerTimerState::Timing;
+        s_timer_start_ms = pulseMs;
+        set_timer_relay(false);
+    }
+    if (config.offMode == TIMER_OFF_BY_CTRL && ctrl &&
+        s_trigger_state != TriggerTimerState::Idle && ctrlMs >= s_timer_start_ms) {
+        s_trigger_state = TriggerTimerState::Idle;
+        set_timer_relay(false);
+        return;
+    }
+    const unsigned long now = millis();
+    if (s_trigger_state == TriggerTimerState::Timing && now - s_timer_start_ms >= config.durationMs) {
+        s_trigger_state = TriggerTimerState::RelayOn;
+        s_relay_start_ms = now;
+        set_timer_relay(true);
+    }
+    if (s_trigger_state == TriggerTimerState::RelayOn && config.offMode == TIMER_OFF_BY_DELAY &&
+        now - s_relay_start_ms >= config.delayOffMs) {
+        s_trigger_state = TriggerTimerState::Idle;
+        set_timer_relay(false);
+    }
+
+    // trigger_timer_process runs after CT_counter::process(), so the timer
+    // remains the owner of TIMER_RELAY_PIN even while the counter updates.
+    set_timer_relay(s_relay_on);
 }

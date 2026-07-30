@@ -209,6 +209,7 @@ void counterTask(void *pvParameters) {
         CT_counter* ctr2 = getCounterInstance(2);
         if (ctr1) ctr1->process();
         if (ctr2) ctr2->process();
+        trigger_timer_process();
         
         // Run at 1ms interval
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(TASK_INTERVAL_COUNTER));

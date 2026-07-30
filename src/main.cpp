@@ -89,6 +89,7 @@ void setup() {
     Serial.println("[4/6] Initializing timers...");
     freq_timer_init();
     stopwatch_timer_init();
+    trigger_timer_init();
     
     // =========================================================================
     // PHASE 5: Initialize communication interfaces
@@ -149,6 +150,7 @@ void loop() {
     
     // Process serial commands (debug interface)
     serial_handler_loop();
+    ui_process_touch();
     
     // Update the TFT display every 200ms
     static unsigned long last_ui_update = 0;

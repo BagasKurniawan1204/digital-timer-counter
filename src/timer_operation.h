@@ -13,6 +13,20 @@
 #include <Arduino.h>
 #include "driver/timer.h"
 
+enum TimerOffMode : uint8_t { TIMER_OFF_BY_CTRL = 0, TIMER_OFF_BY_DELAY = 1 };
+
+struct TriggerTimerConfig {
+    uint32_t durationMs;
+    uint32_t delayOffMs;
+    TimerOffMode offMode;
+};
+
+struct TriggerTimerStatus {
+    bool running;
+    bool relayOn;
+    uint32_t elapsedMs;
+};
+
 // =============================================================================
 // FUNCTION DECLARATIONS
 // =============================================================================
@@ -66,5 +80,11 @@ void stopwatch_reset();
  * @param elapsed_us Pointer to store elapsed time
  */
 void stopwatch_get_elapsed(uint64_t *elapsed_us);
+
+void trigger_timer_init();
+void trigger_timer_process();
+void trigger_timer_set_config(const TriggerTimerConfig &config);
+TriggerTimerConfig trigger_timer_get_config();
+TriggerTimerStatus trigger_timer_get_status();
 
 #endif // TIMER_OPERATION_H

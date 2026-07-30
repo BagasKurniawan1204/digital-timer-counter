@@ -65,6 +65,9 @@ void nvs_config_get_defaults(StoredConfig_t* config) {
     // Modbus defaults
     config->modbus_address = MODBUS_SLAVE_ID;
     config->modbus_baud = MODBUS_BAUD_RATE;
+    config->timer_duration_ms = 5000UL;
+    config->timer_delay_off_ms = 2000UL;
+    config->timer_off_mode = TIMER_OFF_BY_DELAY;
     
     config->config_version = CONFIG_VERSION;
 }
@@ -86,6 +89,7 @@ bool nvs_config_load(StoredConfig_t* config) {
         Serial.printf("[NVS] Config version mismatch (stored=%d, current=%d), using defaults\n",
                       stored_version, CONFIG_VERSION);
         nvs_config_get_defaults(config);
+        nvs_config_save(config);
         return false;
     }
     
@@ -104,6 +108,9 @@ bool nvs_config_load(StoredConfig_t* config) {
     // Load Modbus
     config->modbus_address = prefs.getUChar(NVS_MODBUS_ADDR, MODBUS_SLAVE_ID);
     config->modbus_baud = prefs.getUInt(NVS_MODBUS_BAUD, MODBUS_BAUD_RATE);
+    config->timer_duration_ms = prefs.getUInt(NVS_TIMER_DURATION, 5000UL);
+    config->timer_delay_off_ms = prefs.getUInt(NVS_TIMER_DELAYOFF, 2000UL);
+    config->timer_off_mode = (TimerOffMode)prefs.getUChar(NVS_TIMER_OFFMODE, TIMER_OFF_BY_DELAY);
     
     config->config_version = stored_version;
     
@@ -146,6 +153,9 @@ bool nvs_config_save(const StoredConfig_t* config) {
     // Save Modbus
     prefs.putUChar(NVS_MODBUS_ADDR, config->modbus_address);
     prefs.putUInt(NVS_MODBUS_BAUD, config->modbus_baud);
+    prefs.putUInt(NVS_TIMER_DURATION, config->timer_duration_ms);
+    prefs.putUInt(NVS_TIMER_DELAYOFF, config->timer_delay_off_ms);
+    prefs.putUChar(NVS_TIMER_OFFMODE, (uint8_t)config->timer_off_mode);
     
     // Save version
     prefs.putUChar("cfg_ver", CONFIG_VERSION);
@@ -185,6 +195,14 @@ bool nvs_save_preset(uint8_t channel, int32_t preset) {
     prefs.putInt(key, preset);
     
     Serial.printf("[NVS] Saved CH%d preset: %ld\n", channel + 1, (long)preset);
+    return true;
+}
+
+bool nvs_save_trigger_timer_config(const TriggerTimerConfig &config) {
+    if (!nvs_initialized) nvs_config_init();
+    prefs.putUInt(NVS_TIMER_DURATION, config.durationMs);
+    prefs.putUInt(NVS_TIMER_DELAYOFF, config.delayOffMs);
+    prefs.putUChar(NVS_TIMER_OFFMODE, (uint8_t)config.offMode);
     return true;
 }
 
@@ -248,6 +266,12 @@ void nvs_config_apply(const StoredConfig_t* config) {
     ch2_cfg.invert_ina = false;
     ch2_cfg.invert_inb = false;
     input_config_set_mode(1, &ch2_cfg);
+
+    trigger_timer_set_config({
+        config->timer_duration_ms,
+        config->timer_delay_off_ms,
+        config->timer_off_mode,
+    });
     
     Serial.println("[NVS] Configuration applied");
 }

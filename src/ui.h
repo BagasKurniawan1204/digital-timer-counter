@@ -9,6 +9,7 @@ void ui_init();
 // Update the display with current counter values and frequency
 void ui_update_counter(int32_t counter1_current, int32_t counter1_preset, int32_t counter1_frequency,
 					   int32_t counter2_current, int32_t counter2_preset, int32_t counter2_frequency);
+void ui_process_touch();
 
 // Calibration and touch handling (optional)
 void ui_calibrate_touch();

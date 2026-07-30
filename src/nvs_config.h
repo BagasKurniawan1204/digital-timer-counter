@@ -13,6 +13,7 @@
 #include <Arduino.h>
 #include "CT_counter.h"
 #include "input_config.h"
+#include "timer_operation.h"
 
 // =============================================================================
 // NVS NAMESPACE AND KEYS
@@ -36,6 +37,9 @@
 #define NVS_WIFI_PASS       "wifi_pass"
 #define NVS_MODBUS_ADDR     "mb_addr"
 #define NVS_MODBUS_BAUD     "mb_baud"
+#define NVS_TIMER_DURATION  "tm_dur"
+#define NVS_TIMER_DELAYOFF  "tm_off"
+#define NVS_TIMER_OFFMODE   "tm_mode"
 
 // =============================================================================
 // STORED CONFIGURATION STRUCTURE
@@ -56,13 +60,18 @@ typedef struct {
     // Modbus config
     uint8_t modbus_address;
     uint32_t modbus_baud;
+
+    // Trigger timer configuration
+    uint32_t timer_duration_ms;
+    uint32_t timer_delay_off_ms;
+    TimerOffMode timer_off_mode;
     
     // Version for config migration
     uint8_t config_version;
 } StoredConfig_t;
 
 // Current config version (increment when structure changes)
-#define CONFIG_VERSION 1
+#define CONFIG_VERSION 2
 
 // =============================================================================
 // FUNCTION DECLARATIONS
@@ -111,6 +120,7 @@ bool nvs_save_edge_mode(uint8_t channel, EdgeMode edge);
  * @return true on success
  */
 bool nvs_save_preset(uint8_t channel, int32_t preset);
+bool nvs_save_trigger_timer_config(const TriggerTimerConfig &config);
 
 /**
  * @brief Load channel input mode from NVS

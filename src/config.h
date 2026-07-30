@@ -75,6 +75,7 @@
 // =============================================================================
 #define OUTPUT_CH1_PIN              25      // Output channel 1 (comparison output)
 #define OUTPUT_CH2_PIN              26      // Output channel 2 (comparison output)
+#define TIMER_RELAY_PIN              OUTPUT_CH1_PIN // Timer relay output (GPIO25)
 
 // =============================================================================
 // FREERTOS TASK CONFIGURATION
