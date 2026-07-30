@@ -54,11 +54,11 @@ void sensor_loop() {
             
             if (!stopwatch_running) {
                 Serial.println("SENSOR: Rising edge -> START stopwatch");
-                stopwatch_start();
+                //stopwatch_start();
                 stopwatch_running = true;
             } else {
                 Serial.println("SENSOR: Rising edge -> PAUSE stopwatch");
-                stopwatch_pause();
+                //stopwatch_pause();
                 stopwatch_running = false;
             }
         }
@@ -74,7 +74,7 @@ void sensor_loop() {
     // Update elapsed time when running
     if (stopwatch_running) {
         uint64_t elapsed_us = 0;
-        stopwatch_get_elapsed(&elapsed_us);
+        //stopwatch_get_elapsed(&elapsed_us);
         elapsed_ms = (uint32_t)(elapsed_us / 1000ULL);
     }
 }

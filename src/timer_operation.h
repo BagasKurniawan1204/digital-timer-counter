@@ -34,37 +34,37 @@ void freq_timer_init();
  * @brief Initialize the stopwatch timer
  * Uses TIMER_GROUP_1, TIMER_0
  */
-void stopwatch_timer_init();
+void counter_timer_init();
 
 /**
- * @brief Start the stopwatch from zero
+ * @brief Start the counter timer
  */
-void stopwatch_start();
+void counter_timer_start();
 
 /**
- * @brief Stop and reset the stopwatch
+ * @brief Stop and reset the counter timer
  */
-void stopwatch_stop();
+void counter_timer_stop();
 
 /**
- * @brief Pause the stopwatch (keeps current value)
+ * @brief Pause the counter timer (keeps current value)
  */
-void stopwatch_pause();
+void counter_timer_pause();
 
 /**
- * @brief Resume a paused stopwatch
+ * @brief Resume a paused counter timer
  */
-void stopwatch_resume();
+void counter_timer_resume();
 
 /**
- * @brief Reset stopwatch counter to zero
+ * @brief Reset counter timer to zero
  */
-void stopwatch_reset();
+void counter_timer_reset();
 
 /**
  * @brief Get elapsed time in microseconds
  * @param elapsed_us Pointer to store elapsed time
  */
-void stopwatch_get_elapsed(uint64_t *elapsed_us);
+void counter_timer_get_elapsed(uint64_t *elapsed_us);
 
 #endif // TIMER_OPERATION_H

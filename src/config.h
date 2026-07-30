@@ -51,8 +51,9 @@
 #define FREQ_TIMER_IDX              TIMER_0
 #define FREQ_MEASURE_INTERVAL_US    100000  // 100ms = 10Hz frequency measurement
 
-#define STOPWATCH_TIMER_GROUP       TIMER_GROUP_1
-#define STOPWATCH_TIMER_IDX         TIMER_0
+#define COUNTER_TIMER_GROUP       TIMER_GROUP_1
+#define COUNTER_TIMER_IDX         TIMER_0
+# define COUNTER_MEASURE_INTERVAL_US 1000000 // 1s = 1Hz counter increment for testing
 
 // Timer prescaler: 80MHz / 80 = 1MHz (1us ticks)
 #define TIMER_DIVIDER               80

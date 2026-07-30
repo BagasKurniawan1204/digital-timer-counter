@@ -69,6 +69,14 @@ void serial_handler_loop() {
             timer_start(FREQ_TIMER_GROUP, FREQ_TIMER_IDX);
             Serial.println("PCNT & Timer Resumed");
         }
+        else if (input == "CTSTART") {
+            timer_start(COUNTER_TIMER_GROUP, COUNTER_TIMER_IDX);
+            Serial.println("Counter Timer Start");
+        }
+        else if (input == "CTPAUSE") {
+            timer_pause(COUNTER_TIMER_GROUP, COUNTER_TIMER_IDX);
+            Serial.println("Counter Timer Stop");
+        }
         else if (input == "STATUS") {
             Serial.println("\n=== SYSTEM STATUS ===");
             Serial.printf("Free Heap: %d bytes\n", ESP.getFreeHeap());
@@ -115,7 +123,7 @@ void serial_handler_loop() {
         }
         else if (input == "TIMER OFF") {
             timer_enabled = false;
-            stopwatch_pause();
+            // stopwatch_pause();
             stopwatch_running = false;
             if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                 systemData.timer.enabled = false;

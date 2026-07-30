@@ -223,7 +223,7 @@ static uint16_t cb_GetTimerEnable(TRegister* reg, uint16_t val) {
 
 static uint16_t cb_SetTimerReset(TRegister* reg, uint16_t val) {
     if (val == 1) {
-        stopwatch_reset();
+        // stopwatch_reset();
         elapsed_ms = 0;
         reg->value = 0; // Auto-reset register
     }

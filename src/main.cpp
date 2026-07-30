@@ -25,6 +25,7 @@
 #include "nvs_config.h"
 #include "CT_counter.h"
 #include "ui.h"
+#include "spreadsheet_log.h"
 
 // Global counter instances
 CT_counter* counter1 = nullptr;
@@ -88,7 +89,7 @@ void setup() {
     // =========================================================================
     Serial.println("[4/6] Initializing timers...");
     freq_timer_init();
-    stopwatch_timer_init();
+    counter_timer_init();
     
     // =========================================================================
     // PHASE 5: Initialize communication interfaces
@@ -96,6 +97,7 @@ void setup() {
     Serial.println("[5/6] Initializing communication...");
     web_server_init();
     modbus_init();
+    spreadsheet_log_init();
     
     // =========================================================================
     // PHASE 6: Apply stored configuration
@@ -149,6 +151,7 @@ void loop() {
     
     // Process serial commands (debug interface)
     serial_handler_loop();
+    spreadsheet_log_loop();
     
     // Update the TFT display every 200ms
     static unsigned long last_ui_update = 0;

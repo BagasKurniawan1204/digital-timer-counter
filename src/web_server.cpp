@@ -281,20 +281,20 @@ void web_server_init() {
         ws.textAll(make_state_json());
     });
     
-    server.on("/timer/disable", HTTP_GET, [](AsyncWebServerRequest *request) {
-        timer_enabled = false;
-        stopwatch_pause();
-        stopwatch_running = false;
-        request->send(200, "application/json", "{\"status\":\"disabled\"}");
-        ws.textAll(make_state_json());
-    });
+    // server.on("/timer/disable", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //     timer_enabled = false;
+    //     stopwatch_pause();
+    //     stopwatch_running = false;
+    //     request->send(200, "application/json", "{\"status\":\"disabled\"}");
+    //     ws.textAll(make_state_json());
+    // });
     
-    server.on("/timer/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
-        stopwatch_reset();
-        elapsed_ms = 0;
-        request->send(200, "application/json", "{\"status\":\"reset\"}");
-        ws.textAll(make_state_json());
-    });
+    // server.on("/timer/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //     stopwatch_reset();
+    //     elapsed_ms = 0;
+    //     request->send(200, "application/json", "{\"status\":\"reset\"}");
+    //     ws.textAll(make_state_json());
+    // });
     
     // =========================================================================
     // DEBUG ENDPOINTS

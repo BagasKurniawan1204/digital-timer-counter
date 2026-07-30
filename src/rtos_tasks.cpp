@@ -11,6 +11,7 @@
 #include "modbus_rtu.h"
 #include "web_server.h"
 #include "CT_counter.h"
+#include "spreadsheet_log.h"
 
 // =============================================================================
 // GLOBAL DEFINITIONS
@@ -170,6 +171,12 @@ void counterTask(void *pvParameters) {
     Serial.println("Counter Task: Started");
     
     for (;;) {
+        // Timestamp count changes before any communication work can run.
+        spreadsheet_log_capture_counts(
+            pcnt_ch1_get_count(),
+            pcnt_ch2_get_count(),
+            millis());
+
         // Check for PCNT overflow events from ISR
         while (xQueueReceive(pcntEventQueue, &event, 0) == pdTRUE) {
             if (event.channel < 2) {
@@ -228,7 +235,7 @@ void timerTask(void *pvParameters) {
             if (systemData.timer.enabled && systemData.timer.running) {
                 // Get elapsed time from hardware timer
                 uint64_t elapsed_us = 0;
-                stopwatch_get_elapsed(&elapsed_us);
+                //stopwatch_get_elapsed(&elapsed_us);
                 systemData.timer.elapsed_ms = (uint32_t)(elapsed_us / 1000ULL);
                 
                 // Also update the global for backwards compatibility
@@ -276,11 +283,11 @@ void inputTask(void *pvParameters) {
                     
                     if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                         if (!systemData.timer.running) {
-                            stopwatch_start();
+                            //stopwatch_start();
                             systemData.timer.running = true;
                             Serial.println("Input: Timer STARTED");
                         } else {
-                            stopwatch_pause();
+                            //stopwatch_pause();
                             systemData.timer.running = false;
                             Serial.println("Input: Timer PAUSED");
                         }
