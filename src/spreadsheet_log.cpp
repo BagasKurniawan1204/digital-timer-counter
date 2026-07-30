@@ -2,6 +2,9 @@
 #include <WiFi.h>
 #include <math.h>
 #include <ESP_Google_Sheet_Client.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 #include "globals.h"
 #include "spreadsheet_log.h"
@@ -48,6 +51,9 @@ constexpr unsigned long kExpectedIntervalMs = 1000UL;
 constexpr size_t kMaxBufferedRows = 20;              // batas aman ukuran buffer per channel
 // Setelah sebuah perubahan disimpan, abaikan perubahan berikutnya selama 200 ms.
 constexpr unsigned long kChangeCooldownMs = 200UL;
+constexpr size_t kLogQueueLength = 128;
+constexpr uint32_t kLoggerTaskStackWords = 8192;
+constexpr UBaseType_t kLoggerTaskPriority = 1;
 
 struct LogEntry {
     unsigned long startMs;
@@ -58,19 +64,22 @@ struct LogEntry {
 
 struct ChannelLogger {
     const char *sheetRange;
-    int32_t lastLoggedCount;
-    unsigned long intervalStartMs;
-    unsigned long lastFlushMs;
-
     LogEntry buffer[kMaxBufferedRows];
     size_t bufferCount;
 
     explicit ChannelLogger(const char *range)
         : sheetRange(range),
-          lastLoggedCount(0),
-          intervalStartMs(0),
-          lastFlushMs(0),
           bufferCount(0) {}
+};
+
+struct CaptureState {
+    int32_t lastObservedCount;
+    unsigned long lastSavedMs;
+};
+
+struct QueuedLogEntry {
+    uint8_t channel;
+    LogEntry entry;
 };
 
 bool loggerEnabled = false;
@@ -78,6 +87,11 @@ bool loggerInitialized = false;
 
 ChannelLogger ch1Logger(kSheet1Range);
 ChannelLogger ch2Logger(kSheet2Range);
+CaptureState ch1Capture = {0, 0};
+CaptureState ch2Capture = {0, 0};
+QueueHandle_t logEntryQueue = nullptr;
+TaskHandle_t loggerTaskHandle = nullptr;
+volatile uint32_t droppedLogEntries = 0;
 
 void tokenStatusCallback(TokenInfo info) {
     if (info.status == token_status_error) {
@@ -110,9 +124,8 @@ double calcErrorPercent(double durationMs) {
 // Mengirim SEMUA baris yang ada di buffer channel ini dalam 1 API call saja.
 // Ini yang membuat batching hemat kuota: berapa pun bufferCount-nya (1 s/d
 // kMaxBufferedRows), tetap cuma 1 write request ke Google Sheets.
-bool flushChannelLogger(ChannelLogger &logger, unsigned long nowMs) {
+bool flushChannelLogger(ChannelLogger &logger) {
     if (logger.bufferCount == 0) {
-        logger.lastFlushMs = nowMs;
         return true;  // tidak ada apa-apa untuk dikirim, anggap sukses
     }
 
@@ -136,7 +149,6 @@ bool flushChannelLogger(ChannelLogger &logger, unsigned long nowMs) {
         response.toString(Serial, true);
         valueRange.clear();
         logger.bufferCount = 0;
-        logger.lastFlushMs = nowMs;
         return true;
     }
 
@@ -148,11 +160,11 @@ bool flushChannelLogger(ChannelLogger &logger, unsigned long nowMs) {
 // Menambahkan satu entri baru ke buffer channel. Kalau buffer sudah penuh,
 // paksa flush dulu supaya ada tempat -- ini jaga-jaga saja, karena flush
 // yang memicu request API.
-void bufferChannelEntry(ChannelLogger &logger, const LogEntry &entry, unsigned long nowMs) {
+void bufferChannelEntry(ChannelLogger &logger, const LogEntry &entry) {
     if (logger.bufferCount >= kMaxBufferedRows) {
         Serial.printf("[SheetLogger] Buffer %s penuh, flush paksa sebelum menambah entri baru\n",
                       logger.sheetRange);
-        flushChannelLogger(logger, nowMs);
+        flushChannelLogger(logger);
     }
 
     if (logger.bufferCount < kMaxBufferedRows) {
@@ -170,31 +182,54 @@ void bufferChannelEntry(ChannelLogger &logger, const LogEntry &entry, unsigned l
     }
 } 
 
-// Mengecek satu channel: perubahan count hanya dicatat jika cooldown 200 ms
-// sudah berakhir. Perubahan yang terjadi selama cooldown tetap ditandai telah
-// terlihat agar tidak ikut dicatat setelah cooldown berakhir.
-// Buffer di-flush hanya saat penuh.
-void processChannel(ChannelLogger &logger, int32_t currentCount, unsigned long nowMs) {
-    if (currentCount != logger.lastLoggedCount) {
-        // Selalu perbarui nilai terakhir yang diamati. Dengan demikian,
-        // perubahan di dalam cooldown tidak akan tersimpan belakangan.
-        logger.lastLoggedCount = currentCount;
-
-        if (nowMs - logger.intervalStartMs >= kChangeCooldownMs) {
-            LogEntry entry;
-            entry.startMs = logger.intervalStartMs;
-            entry.endMs = nowMs;
-            entry.durationMs = nowMs - logger.intervalStartMs;
-            entry.errorPercent = calcErrorPercent(entry.durationMs);
-
-            bufferChannelEntry(logger, entry, nowMs);
-            logger.intervalStartMs = nowMs;
-        }
+void captureChannel(uint8_t channel, CaptureState &state,
+                    int32_t currentCount, unsigned long nowMs) {
+    if (currentCount == state.lastObservedCount) {
+        return;
     }
 
-    bool bufferFull = (logger.bufferCount >= kMaxBufferedRows);
-    if (bufferFull) {
-        flushChannelLogger(logger, nowMs);
+    state.lastObservedCount = currentCount;
+    if (nowMs - state.lastSavedMs < kChangeCooldownMs || logEntryQueue == nullptr) {
+        return;
+    }
+
+    QueuedLogEntry queued = {
+        .channel = channel,
+        .entry = {
+            .startMs = state.lastSavedMs,
+            .endMs = nowMs,
+            .durationMs = nowMs - state.lastSavedMs,
+            .errorPercent = calcErrorPercent(nowMs - state.lastSavedMs),
+        },
+    };
+
+    if (xQueueSend(logEntryQueue, &queued, 0) == pdTRUE) {
+        state.lastSavedMs = nowMs;
+    } else {
+        ++droppedLogEntries;
+    }
+}
+
+void spreadsheetLoggerTask(void * /*pvParameters*/) {
+    QueuedLogEntry queued;
+    Serial.println("[SheetLogger] Background upload task started on Core 0");
+
+    for (;;) {
+        if (xQueueReceive(logEntryQueue, &queued, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            ChannelLogger &logger = (queued.channel == 0) ? ch1Logger : ch2Logger;
+            bufferChannelEntry(logger, queued.entry);
+        }
+
+        // WiFi/API hanya dipanggil setelah buffer penuh. Counter task di Core 1
+        // tetap merekam timestamp ke queue saat request ini berjalan.
+        if (WiFi.status() == WL_CONNECTED && GSheet.ready()) {
+            if (ch1Logger.bufferCount >= kMaxBufferedRows) {
+                flushChannelLogger(ch1Logger);
+            }
+            if (ch2Logger.bufferCount >= kMaxBufferedRows) {
+                flushChannelLogger(ch2Logger);
+            }
+        }
     }
 }
 
@@ -218,18 +253,30 @@ void spreadsheet_log_init() {
     GSheet.setPrerefreshSeconds(10 * 60);
     GSheet.begin(CLIENT_EMAIL, PROJECT_ID, PRIVATE_KEY);
 
+    logEntryQueue = xQueueCreate(kLogQueueLength, sizeof(QueuedLogEntry));
+    if (logEntryQueue == nullptr) {
+        Serial.println("[SheetLogger] ERROR: failed to create log queue");
+        return;
+    }
+
     int32_t initialCh1 = 0;
     int32_t initialCh2 = 0;
     readCounts(initialCh1, initialCh2);
 
     unsigned long nowMs = millis();
-    ch1Logger.lastLoggedCount = initialCh1;
-    ch1Logger.intervalStartMs = nowMs;
-    ch1Logger.lastFlushMs = nowMs;
+    ch1Capture = {initialCh1, nowMs};
+    ch2Capture = {initialCh2, nowMs};
 
-    ch2Logger.lastLoggedCount = initialCh2;
-    ch2Logger.intervalStartMs = nowMs;
-    ch2Logger.lastFlushMs = nowMs;
+    if (xTaskCreatePinnedToCore(
+            spreadsheetLoggerTask,
+            "SheetLogger",
+            kLoggerTaskStackWords,
+            nullptr,
+            kLoggerTaskPriority,
+            &loggerTaskHandle,
+            0) != pdPASS) {
+        Serial.println("[SheetLogger] ERROR: failed to create upload task");
+    }
 }
 
 void spreadsheet_log_loop() {
@@ -237,37 +284,26 @@ void spreadsheet_log_loop() {
         return;
     }
 
-    // Debug: cetak status WiFi & GSheet tiap 5 detik, supaya kalau koneksi
-    // gagal diam-diam (misal SSID/password salah), kita bisa lihat langsung
-    // di Serial Monitor, bukan cuma "tidak ada yang terjadi".
+    // Status saja; request API dijalankan oleh spreadsheetLoggerTask.
     static unsigned long lastStatusPrintMs = 0;
     unsigned long nowStatusMs = millis();
     if (nowStatusMs - lastStatusPrintMs > 5000) {
         lastStatusPrintMs = nowStatusMs;
-        Serial.printf("[SheetLogger] WiFi status=%d (3=connected) IP=%s GSheet.ready=%d ch1Buf=%u ch2Buf=%u\n",
+        Serial.printf("[SheetLogger] WiFi=%d GSheet.ready=%d ch1Buf=%u ch2Buf=%u queue=%u dropped=%lu\n",
                       (int)WiFi.status(),
-                      WiFi.localIP().toString().c_str(),
                       (int)GSheet.ready(),
                       (unsigned)ch1Logger.bufferCount,
-                      (unsigned)ch2Logger.bufferCount);
+                      (unsigned)ch2Logger.bufferCount,
+                      logEntryQueue ? (unsigned)uxQueueMessagesWaiting(logEntryQueue) : 0U,
+                      (unsigned long)droppedLogEntries);
     }
+}
 
-    if (WiFi.status() != WL_CONNECTED) {
+void spreadsheet_log_capture_counts(int32_t ch1, int32_t ch2, unsigned long nowMs) {
+    if (!loggerInitialized || logEntryQueue == nullptr) {
         return;
     }
 
-    if (!GSheet.ready()) {
-        return;
-    }
-
-    int32_t currentCh1 = 0;
-    int32_t currentCh2 = 0;
-    readCounts(currentCh1, currentCh2);
-
-    unsigned long nowMs = millis();
-
-    // Channel 1 & 2 diproses SENDIRI-SENDIRI, tidak saling tergantung --
-    // baik soal deteksi perubahan maupun soal kapan masing-masing di-flush.
-    processChannel(ch1Logger, currentCh1, nowMs);
-    processChannel(ch2Logger, currentCh2, nowMs);
+    captureChannel(0, ch1Capture, ch1, nowMs);
+    captureChannel(1, ch2Capture, ch2, nowMs);
 }
