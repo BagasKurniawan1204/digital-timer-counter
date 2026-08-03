@@ -58,6 +58,24 @@
 #define TIMER_DIVIDER               80
 
 // =============================================================================
+// CHANNEL 1 TIMER MODE (CT4S-style countdown)
+// =============================================================================
+// CH1 can operate either as a pulse COUNTER (default) or as a countdown TIMER.
+// In TIMER mode the PCNT unit is paused and the two CH1 inputs are read as
+// plain GPIOs:
+//   COUNTER_CH1_PULSE_PIN (gate)  - countdown runs while asserted, pauses when released
+//   COUNTER_CH1_CTRL_PIN  (reset) - asserting edge clears the output and rearms
+//   OUTPUT_CH1_PIN                - OFF while counting, ON at time-up
+//
+// Both input pins are input-only ESP32 pins (34/35) wired to external pull-up
+// resistors, so they idle HIGH and assert LOW (falling edge is the trigger).
+#define CH1_TIMER_ACTIVE_LOW        1       // 1 = inputs assert LOW (external pull-ups)
+#define TIMER_INPUT_DEBOUNCE_MS     20      // Software debounce for gate/reset inputs
+#define TIMER_SETPOINT_MAX_S        99999   // Max countdown setpoint (~27 hours)
+#define TIMER_DEFAULT_SETPOINT_S    10      // Default countdown time in seconds
+#define TIMER_DEFAULT_DELAY_OFF_S   5       // Default delay-off duration in seconds
+
+// =============================================================================
 // WEB SERVER / WIFI AP CONFIGURATION
 // =============================================================================
 #define WIFI_AP_SSID                "HSC_TIMER_AP"

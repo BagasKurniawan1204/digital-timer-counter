@@ -17,6 +17,13 @@
     .status-value { font-family: monospace; font-size: 24px; }
     .ch-label { font-weight: bold; font-size: 16px; color: #333; }
     #save-status { font-style: italic; color: #666; margin-left: 10px; }
+    .hidden { display: none; }
+    .mode-badge { font-size: 11px; padding: 2px 6px; border-radius: 3px; background: #ddd; color: #333; margin-left: 6px; }
+    .mode-badge.timer { background: #2a6ebb; color: #fff; }
+    .timer-panel { border-top: 1px dashed #bbb; margin-top: 10px; padding-top: 8px; }
+    .t-state { font-family: monospace; font-weight: bold; }
+    /* Unsaved edit: the device no longer overwrites this box until Apply */
+    input.dirty, select.dirty { background: #fff8d0; border: 1px solid #d4a017; }
   </style>
 </head>
 <body>
@@ -34,12 +41,26 @@
 
     <div class="channel-box">
       <span class="ch-label">Channel 1</span>
-      <p>Count: <span class="status-value" id="ch1-count">0</span></p>
-      <p>Freq: <span id="ch1-freq">0</span> Hz</p>
-      <p>Mode: <span id="ch1-mode">UP</span></p>
-      <p>Preset: <span id="ch1-preset-display">10000</span></p>
+      <span class="mode-badge" id="ch1-mode-badge">COUNTER</span>
+
+      <!-- Counter readouts (hidden in timer mode) -->
+      <div id="ch1-counter-status">
+        <p>Count: <span class="status-value" id="ch1-count">0</span></p>
+        <p>Freq: <span id="ch1-freq">0</span> Hz</p>
+        <p>Mode: <span id="ch1-mode">UP</span></p>
+        <p>Preset: <span id="ch1-preset-display">10000</span></p>
+      </div>
+
+      <!-- Timer readouts (hidden in counter mode) -->
+      <div id="ch1-timer-status" class="hidden">
+        <p>Remaining: <span class="status-value" id="t-remaining">0</span> s</p>
+        <p>Setpoint: <span id="t-setpoint-display">10</span> s</p>
+        <p>State: <span class="t-state" id="t-state">IDLE</span></p>
+        <p>Out mode: <span id="t-outmode-display">LATCH</span></p>
+      </div>
+
       <p>Output: <span id="ch1-output" class="output-off">OFF</span></p>
-      <p>
+      <p id="ch1-manual-row">
         Manual:
         <button class="btn-small" id="btn-ch1-plus">+</button>
         <button class="btn-small" id="btn-ch1-minus">-</button>
@@ -49,6 +70,7 @@
         <button class="btn-small button" id="btn-ch1-out-on">ON</button>
         <button class="btn-small button2" id="btn-ch1-out-off">OFF</button>
         <button class="btn-small" id="btn-ch1-out-auto">AUTO</button>
+        <button class="btn-small" id="btn-ch1-timer-reset">Tmr RST</button>
       </p>
     </div>
 
@@ -80,26 +102,57 @@
     <div class="channel-box">
       <span class="ch-label">Channel 1</span>
       <div class="form-row">
-        <label>Mode:</label>
-        <select id="cfg-ch1-mode">
-          <option value="UP">UP (Count Up)</option>
-          <option value="DN">DN (Count Down)</option>
-          <option value="UDA">UDA (Up/Down)</option>
-          <option value="UDC">UDC (Encoder)</option>
+        <label>Type:</label>
+        <select id="cfg-ch1-type">
+          <option value="counter">Counter</option>
+          <option value="timer">Timer</option>
         </select>
       </div>
-      <div class="form-row">
-        <label>Preset:</label>
-        <input type="number" id="cfg-ch1-preset" value="10000" min="0">
+
+      <!-- Counter settings (disabled in timer mode) -->
+      <div id="cfg-ch1-counter">
+        <div class="form-row">
+          <label>Mode:</label>
+          <select id="cfg-ch1-mode">
+            <option value="UP">UP (Count Up)</option>
+            <option value="DN">DN (Count Down)</option>
+            <option value="UDA">UDA (Up/Down)</option>
+            <option value="UDC">UDC (Encoder)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Preset:</label>
+          <input type="number" id="cfg-ch1-preset" value="10000" min="0">
+        </div>
+        <div class="form-row">
+          <label>Edge:</label>
+          <select id="cfg-ch1-edge">
+            <option value="RISING">Rising</option>
+            <option value="FALLING">Falling</option>
+            <option value="BOTH">Both</option>
+          </select>
+        </div>
       </div>
-      <div class="form-row">
-        <label>Edge:</label>
-        <select id="cfg-ch1-edge">
-          <option value="RISING">Rising</option>
-          <option value="FALLING">Falling</option>
-          <option value="BOTH">Both</option>
-        </select>
+
+      <!-- Timer settings (visible in timer mode) -->
+      <div id="cfg-ch1-timer" class="timer-panel hidden">
+        <div class="form-row">
+          <label>Setpoint:</label>
+          <input type="number" id="cfg-ch1-tset" value="10" min="0" max="99999"> <span style="font-size:11px;color:#666;">sec</span>
+        </div>
+        <div class="form-row">
+          <label>Delay Off:</label>
+          <input type="number" id="cfg-ch1-tdelay" value="5" min="0" max="99999"> <span style="font-size:11px;color:#666;">sec</span>
+        </div>
+        <div class="form-row">
+          <label>Out Mode:</label>
+          <select id="cfg-ch1-toutmode">
+            <option value="latch">Latching</option>
+            <option value="delayoff">Delay Off</option>
+          </select>
+        </div>
       </div>
+
       <button class="btn-small button" id="btn-ch1-apply">Apply</button>
       <button class="btn-small button2" id="btn-ch1-reset">Reset</button>
     </div>
@@ -158,6 +211,67 @@
   </div>
 
   <script>
+  // --- Edited-field tracking ---
+  // The device pushes state over the WebSocket several times a second. Without
+  // this, any value you type gets overwritten as soon as the next push arrives.
+  // A field you have touched is "dirty" and is left alone until Apply succeeds.
+  const dirtyFields = new Set();
+
+  const EDITABLE_FIELDS = [
+    "cfg-ch1-preset", "cfg-ch1-tset", "cfg-ch1-tdelay", "cfg-ch1-toutmode",
+    "cfg-ch1-mode", "cfg-ch1-edge",
+    "cfg-ch2-preset", "cfg-ch2-mode", "cfg-ch2-edge"
+  ];
+
+  EDITABLE_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", () => {
+      dirtyFields.add(id);
+      el.classList.add("dirty");
+    });
+  });
+
+  // Called after a successful Apply - the device now holds these values.
+  function clearDirty(ids) {
+    ids.forEach(id => {
+      dirtyFields.delete(id);
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("dirty");
+    });
+  }
+
+  // Write a device value into a config field, unless the user is editing it.
+  function syncField(id, value) {
+    if (value === undefined || value === null) return;
+    if (dirtyFields.has(id)) return;               // unsaved local edit
+    if (document.activeElement.id === id) return;  // actively focused
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  }
+
+  // --- CH1 counter/timer view switching ---
+  let ch1IsTimer = false;
+
+  function applyCh1Type(isTimer) {
+    ch1IsTimer = isTimer;
+
+    document.getElementById("ch1-counter-status").classList.toggle("hidden", isTimer);
+    document.getElementById("ch1-timer-status").classList.toggle("hidden", !isTimer);
+    document.getElementById("ch1-manual-row").classList.toggle("hidden", isTimer);
+    document.getElementById("cfg-ch1-counter").classList.toggle("hidden", isTimer);
+    document.getElementById("cfg-ch1-timer").classList.toggle("hidden", !isTimer);
+
+    const badge = document.getElementById("ch1-mode-badge");
+    badge.textContent = isTimer ? "TIMER" : "COUNTER";
+    badge.className = isTimer ? "mode-badge timer" : "mode-badge";
+
+    // Keep the type selector in sync when the change came from the device
+    const sel = document.getElementById("cfg-ch1-type");
+    const want = isTimer ? "timer" : "counter";
+    if (sel.value !== want) sel.value = want;
+  }
+
   // --- WebSocket setup ---
   const socket = new WebSocket("ws://" + window.location.host + "/ws");
   
@@ -179,6 +293,16 @@
         el.textContent = d.ch1_out ? "ON" : "OFF";
         el.className = d.ch1_out ? "output-on" : "output-off";
       }
+
+      // Channel 1 timer mode
+      if (d.ch1_mode_type !== undefined) applyCh1Type(d.ch1_mode_type === "TIMER");
+      if (d.t_remaining !== undefined) document.getElementById("t-remaining").textContent = d.t_remaining;
+      if (d.t_setpoint !== undefined) document.getElementById("t-setpoint-display").textContent = d.t_setpoint;
+      if (d.t_state !== undefined) document.getElementById("t-state").textContent = d.t_state;
+      if (d.t_outmode !== undefined) {
+        document.getElementById("t-outmode-display").textContent =
+          d.t_outmode === "LATCH" ? "LATCHING" : "DELAY OFF";
+      }
       
       // Channel 2 data
       if (d.ch2_count !== undefined) document.getElementById("ch2-count").textContent = d.ch2_count;
@@ -198,21 +322,22 @@
       if (d.uptime !== undefined) document.getElementById("sys-uptime").textContent = d.uptime;
       if (d.heap !== undefined) document.getElementById("sys-heap").textContent = d.heap;
       
-      // Config sync (only update input if it's not currently focused)
-      if (d.ch1_preset !== undefined && document.activeElement.id !== "cfg-ch1-preset") {
-        document.getElementById("cfg-ch1-preset").value = d.ch1_preset;
+      // Config sync - skips fields you are editing (see syncField)
+      syncField("cfg-ch1-preset", d.ch1_preset);
+      syncField("cfg-ch2-preset", d.ch2_preset);
+      syncField("cfg-ch1-tset", d.t_setpoint);
+      syncField("cfg-ch1-tdelay", d.t_delay);
+      if (d.t_outmode !== undefined) {
+        syncField("cfg-ch1-toutmode", d.t_outmode === "LATCH" ? "latch" : "delayoff");
       }
-      if (d.ch2_preset !== undefined && document.activeElement.id !== "cfg-ch2-preset") {
-        document.getElementById("cfg-ch2-preset").value = d.ch2_preset;
-      }
-      
+
     } catch(e) {
       console.warn("ws parse error:", evt.data);
     }
   });
 
   // --- API helper ---
-  async function apiCall(path, showStatus = false) {
+  async function apiCall(path, showStatus = false, clearIds = []) {
     try {
       const res = await fetch(path, { cache: "no-store" });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -221,6 +346,9 @@
         document.getElementById("save-status").textContent = j.status || "OK";
         setTimeout(() => document.getElementById("save-status").textContent = "", 3000);
       }
+      // On success the device holds the new values, so re-arm sync for the
+      // fields this call configured. The follow-up ws push fills them in.
+      clearDirty(clearIds);
       return j;
     } catch (e) {
       console.error('API failed:', path, e);
@@ -251,20 +379,43 @@
   document.getElementById('btn-timer-reset').onclick = () => apiCall('/timer/reset');
 
   // --- Channel 1 config ---
-  document.getElementById('btn-ch1-apply').onclick = () => {
-    const mode = document.getElementById('cfg-ch1-mode').value;
-    const preset = document.getElementById('cfg-ch1-preset').value;
-    const edge = document.getElementById('cfg-ch1-edge').value;
-    apiCall(`/config/ch1?mode=${mode}&preset=${preset}&edge=${edge}`, true);
+  // Switching type takes effect immediately so the device hands GPIO25 over
+  // to the right owner before any other setting is applied.
+  document.getElementById('cfg-ch1-type').onchange = (e) => {
+    const type = e.target.value;
+    applyCh1Type(type === "timer");
+    apiCall(`/ch1/mode?type=${type}`, true);
   };
-  document.getElementById('btn-ch1-reset').onclick = () => apiCall('/counter/reset/1');
+
+  document.getElementById('btn-ch1-apply').onclick = () => {
+    if (ch1IsTimer) {
+      const sec = document.getElementById('cfg-ch1-tset').value;
+      const delay = document.getElementById('cfg-ch1-tdelay').value;
+      const outmode = document.getElementById('cfg-ch1-toutmode').value;
+      apiCall(`/ch1/timer/set?sec=${sec}&delay=${delay}&outmode=${outmode}`, true,
+              ['cfg-ch1-tset', 'cfg-ch1-tdelay', 'cfg-ch1-toutmode']);
+    } else {
+      const mode = document.getElementById('cfg-ch1-mode').value;
+      const preset = document.getElementById('cfg-ch1-preset').value;
+      const edge = document.getElementById('cfg-ch1-edge').value;
+      apiCall(`/config/ch1?mode=${mode}&preset=${preset}&edge=${edge}`, true,
+              ['cfg-ch1-mode', 'cfg-ch1-preset', 'cfg-ch1-edge']);
+    }
+  };
+
+  // Reset clears the timer output in timer mode, the count in counter mode
+  document.getElementById('btn-ch1-reset').onclick = () =>
+    apiCall(ch1IsTimer ? '/ch1/timer/reset' : '/counter/reset/1');
+
+  document.getElementById('btn-ch1-timer-reset').onclick = () => apiCall('/ch1/timer/reset');
 
   // --- Channel 2 config ---
   document.getElementById('btn-ch2-apply').onclick = () => {
     const mode = document.getElementById('cfg-ch2-mode').value;
     const preset = document.getElementById('cfg-ch2-preset').value;
     const edge = document.getElementById('cfg-ch2-edge').value;
-    apiCall(`/config/ch2?mode=${mode}&preset=${preset}&edge=${edge}`, true);
+    apiCall(`/config/ch2?mode=${mode}&preset=${preset}&edge=${edge}`, true,
+            ['cfg-ch2-mode', 'cfg-ch2-preset', 'cfg-ch2-edge']);
   };
   document.getElementById('btn-ch2-reset').onclick = () => apiCall('/counter/reset/2');
 
@@ -286,6 +437,15 @@
         if (cfg.ch2_mode) document.getElementById('cfg-ch2-mode').value = cfg.ch2_mode;
         if (cfg.ch2_preset) document.getElementById('cfg-ch2-preset').value = cfg.ch2_preset;
         if (cfg.ch2_edge) document.getElementById('cfg-ch2-edge').value = cfg.ch2_edge;
+
+        // CH1 timer settings (use != null so a stored 0 is still applied)
+        if (cfg.t_setpoint != null) document.getElementById('cfg-ch1-tset').value = cfg.t_setpoint;
+        if (cfg.t_delay != null) document.getElementById('cfg-ch1-tdelay').value = cfg.t_delay;
+        if (cfg.t_outmode) {
+          document.getElementById('cfg-ch1-toutmode').value =
+            cfg.t_outmode === "LATCH" ? "latch" : "delayoff";
+        }
+        if (cfg.ch1_mode_type) applyCh1Type(cfg.ch1_mode_type === "TIMER");
       }
     });
     document.getElementById('sys-ip').textContent = window.location.host;

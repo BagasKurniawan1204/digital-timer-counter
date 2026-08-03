@@ -6,6 +6,7 @@
 #include "nvs_config.h"
 #include "config.h"
 #include "input_config.h"
+#include "ct_timer.h"
 #include <Preferences.h>
 
 // =============================================================================
@@ -55,7 +56,13 @@ void nvs_config_get_defaults(StoredConfig_t* config) {
     config->ch1_edge_mode = EDGE_RISING;
     config->ch1_preset_value = 10000;
     config->ch1_filter = 100;
-    
+
+    // Channel 1 timer mode defaults
+    config->ch1_op_mode = CH1_MODE_COUNTER;
+    config->ch1_timer_setpoint_s = TIMER_DEFAULT_SETPOINT_S;
+    config->ch1_timer_delay_off_s = TIMER_DEFAULT_DELAY_OFF_S;
+    config->ch1_timer_out_mode = TIMER_OUT_LATCH;
+
     // Channel 2 defaults
     config->ch2_input_mode = MODE_UP;
     config->ch2_edge_mode = EDGE_RISING;
@@ -94,6 +101,12 @@ bool nvs_config_load(StoredConfig_t* config) {
     config->ch1_edge_mode = (EdgeMode)prefs.getUChar(NVS_CH1_EDGE, EDGE_RISING);
     config->ch1_preset_value = prefs.getInt(NVS_CH1_PRESET, 10000);
     config->ch1_filter = prefs.getUShort(NVS_CH1_FILTER, 100);
+
+    // Load Channel 1 timer mode settings
+    config->ch1_op_mode = (Ch1Mode)prefs.getUChar(NVS_CH1_OPMODE, CH1_MODE_COUNTER);
+    config->ch1_timer_setpoint_s = prefs.getUInt(NVS_CH1_TSET, TIMER_DEFAULT_SETPOINT_S);
+    config->ch1_timer_delay_off_s = prefs.getUInt(NVS_CH1_TDELAY, TIMER_DEFAULT_DELAY_OFF_S);
+    config->ch1_timer_out_mode = (TimerOutMode)prefs.getUChar(NVS_CH1_TOUTMODE, TIMER_OUT_LATCH);
     
     // Load Channel 2
     config->ch2_input_mode = (InputMode)prefs.getUChar(NVS_CH2_MODE, MODE_UP);
@@ -136,6 +149,12 @@ bool nvs_config_save(const StoredConfig_t* config) {
     prefs.putUChar(NVS_CH1_EDGE, (uint8_t)config->ch1_edge_mode);
     prefs.putInt(NVS_CH1_PRESET, config->ch1_preset_value);
     prefs.putUShort(NVS_CH1_FILTER, config->ch1_filter);
+
+    // Save Channel 1 timer mode settings
+    prefs.putUChar(NVS_CH1_OPMODE, (uint8_t)config->ch1_op_mode);
+    prefs.putUInt(NVS_CH1_TSET, config->ch1_timer_setpoint_s);
+    prefs.putUInt(NVS_CH1_TDELAY, config->ch1_timer_delay_off_s);
+    prefs.putUChar(NVS_CH1_TOUTMODE, (uint8_t)config->ch1_timer_out_mode);
     
     // Save Channel 2
     prefs.putUChar(NVS_CH2_MODE, (uint8_t)config->ch2_input_mode);
@@ -188,18 +207,77 @@ bool nvs_save_preset(uint8_t channel, int32_t preset) {
     return true;
 }
 
+bool nvs_save_ch1_op_mode(Ch1Mode mode) {
+    if (!nvs_initialized) nvs_config_init();
+
+    prefs.putUChar(NVS_CH1_OPMODE, (uint8_t)mode);
+
+    Serial.printf("[NVS] Saved CH1 operating mode: %s\n",
+                  mode == CH1_MODE_TIMER ? "TIMER" : "COUNTER");
+    return true;
+}
+
+bool nvs_save_ch1_timer(uint32_t setpoint_s, uint32_t delay_off_s, TimerOutMode out_mode) {
+    if (!nvs_initialized) nvs_config_init();
+
+    prefs.putUInt(NVS_CH1_TSET, setpoint_s);
+    prefs.putUInt(NVS_CH1_TDELAY, delay_off_s);
+    prefs.putUChar(NVS_CH1_TOUTMODE, (uint8_t)out_mode);
+
+    Serial.printf("[NVS] Saved CH1 timer: setpoint=%lus, delay-off=%lus, out=%s\n",
+                  (unsigned long)setpoint_s, (unsigned long)delay_off_s,
+                  out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAY-OFF");
+    return true;
+}
+
 bool nvs_load_input_mode(uint8_t channel, InputMode* mode) {
     if (!mode) return false;
     if (!nvs_initialized) nvs_config_init();
-    
+
     const char* key = (channel == 0) ? NVS_CH1_MODE : NVS_CH2_MODE;
-    
+
     if (!prefs.isKey(key)) {
         *mode = MODE_UP; // Default
         return false;
     }
-    
+
     *mode = (InputMode)prefs.getUChar(key, MODE_UP);
+    return true;
+}
+
+// =============================================================================
+// TOUCHSCREEN CALIBRATION
+// =============================================================================
+
+bool nvs_save_touch_cal(const uint16_t cal[TOUCH_CAL_WORDS]) {
+    if (!cal) return false;
+    if (!nvs_initialized) nvs_config_init();
+
+    const size_t len = TOUCH_CAL_WORDS * sizeof(uint16_t);
+    if (prefs.putBytes(NVS_TOUCH_CAL, cal, len) != len) {
+        Serial.println("[NVS] ERROR: Failed to save touch calibration");
+        return false;
+    }
+
+    Serial.println("[NVS] Touch calibration saved");
+    return true;
+}
+
+bool nvs_load_touch_cal(uint16_t cal[TOUCH_CAL_WORDS]) {
+    if (!cal) return false;
+    if (!nvs_initialized) nvs_config_init();
+
+    const size_t len = TOUCH_CAL_WORDS * sizeof(uint16_t);
+
+    // Reject a missing or wrong-sized blob: feeding garbage to setTouch() would
+    // make the panel unusable, so the caller should run the wizard instead.
+    if (prefs.getBytesLength(NVS_TOUCH_CAL) != len) {
+        return false;
+    }
+    if (prefs.getBytes(NVS_TOUCH_CAL, cal, len) != len) {
+        return false;
+    }
+
     return true;
 }
 
@@ -209,15 +287,25 @@ bool nvs_load_input_mode(uint8_t channel, InputMode* mode) {
 
 bool nvs_config_reset() {
     if (!nvs_initialized) nvs_config_init();
-    
+
+    // Preserve touch calibration: prefs.clear() below wipes every key, and a
+    // factory reset must not leave the panel uncalibrated (HMI unusable).
+    uint16_t cal[TOUCH_CAL_WORDS];
+    bool has_cal = nvs_load_touch_cal(cal);
+
     // Clear all keys in namespace
     prefs.clear();
-    
+
     // Save defaults
     StoredConfig_t defaults;
     nvs_config_get_defaults(&defaults);
     nvs_config_save(&defaults);
-    
+
+    // Restore the calibration now that the namespace is clean
+    if (has_cal) {
+        nvs_save_touch_cal(cal);
+    }
+
     Serial.println("[NVS] Configuration reset to defaults");
     return true;
 }
@@ -248,6 +336,13 @@ void nvs_config_apply(const StoredConfig_t* config) {
     ch2_cfg.invert_ina = false;
     ch2_cfg.invert_inb = false;
     input_config_set_mode(1, &ch2_cfg);
-    
+
+    // Apply Channel 1 timer settings before selecting the operating mode, so
+    // that switching into timer mode arms the countdown with the stored values.
+    ct_timer_set_setpoint(config->ch1_timer_setpoint_s);
+    ct_timer_set_delay_off(config->ch1_timer_delay_off_s);
+    ct_timer_set_out_mode(config->ch1_timer_out_mode);
+    ch1_set_mode(config->ch1_op_mode);
+
     Serial.println("[NVS] Configuration applied");
 }

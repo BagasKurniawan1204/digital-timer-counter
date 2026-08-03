@@ -24,7 +24,9 @@
 #include "rtos_tasks.h"
 #include "nvs_config.h"
 #include "CT_counter.h"
+#include "ct_timer.h"
 #include "ui.h"
+#include "ui_hmi.h"
 
 // Global counter instances
 CT_counter* counter1 = nullptr;
@@ -98,22 +100,24 @@ void setup() {
     modbus_init();
     
     // =========================================================================
-    // PHASE 6: Apply stored configuration
-    // =========================================================================
-    Serial.println("[6/6] Applying stored configuration...");
-    nvs_config_apply(&storedConfig);
-    
-    // =========================================================================
     // Create CT_counter instances
+    // Done before applying the stored config, because switching CH1 into timer
+    // mode needs to disable the CH1 counter instance.
     // =========================================================================
     Serial.println("Creating CT_counter instances...");
     counter1 = new CT_counter(1);
     counter2 = new CT_counter(2);
-    
+
     // Apply stored preset values
     counter1->setPresetValue(storedConfig.ch1_preset_value);
     counter2->setPresetValue(storedConfig.ch2_preset_value);
-    
+
+    // =========================================================================
+    // PHASE 6: Apply stored configuration
+    // =========================================================================
+    Serial.println("[6/6] Applying stored configuration...");
+    nvs_config_apply(&storedConfig);
+
     // =========================================================================
     // Start RTOS tasks
     // =========================================================================
@@ -135,7 +139,10 @@ void setup() {
     digitalWrite(13, HIGH);   // Backlight ON
     
     ui_init();                // Setup display & draw layout
-    pcnt_resume();
+    ui_hmi_init();            // Load touch calibration (or run the wizard)
+    if (ch1_get_mode() != CH1_MODE_TIMER) {
+        pcnt_resume();        // PCNT stays paused in timer mode
+    }
     
     Serial.println("----------------------------------------");
     Serial.println("System ready! Commands: HELP, STATUS, RESET");
@@ -149,16 +156,21 @@ void loop() {
     
     // Process serial commands (debug interface)
     serial_handler_loop();
-    
-    // Update the TFT display every 200ms
+
+    // Service the touchscreen HMI on every pass so it stays responsive
+    ui_hmi_process();
+
+    // Update the TFT display every 200ms, but only while the home screen is
+    // showing - otherwise the live values would paint over an open menu.
     static unsigned long last_ui_update = 0;
-    if (millis() - last_ui_update > 200) {
+    if (ui_hmi_is_home() && millis() - last_ui_update > 200) {
         last_ui_update = millis();
         // Ensure counters are instantiated before querying
         if (counter1 != nullptr && counter2 != nullptr) {
             ui_update_counter(
                 counter1->getCurrentValue(), counter1->getPresetValue(), s_ch1_frequency_hz,
-                counter2->getCurrentValue(), counter2->getPresetValue(), s_ch2_frequency_hz
+                counter2->getCurrentValue(), counter2->getPresetValue(), s_ch2_frequency_hz,
+                ch1_get_mode()
             );
         }
     }

@@ -10,6 +10,7 @@
 #include "timer_operation.h"
 #include "rtos_tasks.h"
 #include "CT_counter.h"
+#include "ct_timer.h"
 #include "input_config.h"
 #include "nvs_config.h"
 #include "driver/timer.h"
@@ -247,6 +248,78 @@ void serial_handler_loop() {
             Serial.println("=========================\n");
         }
         // =================================================================
+        // CH1 COUNTDOWN TIMER COMMANDS (CT4S style)
+        // =================================================================
+        else if (input == "CH1 TIMER" || input == "CH1 COUNTER") {
+            Ch1Mode mode = input.endsWith("TIMER") ? CH1_MODE_TIMER : CH1_MODE_COUNTER;
+            ch1_set_mode(mode);
+            nvs_save_ch1_op_mode(mode);
+            Serial.printf("CH1 now in %s mode\n", mode == CH1_MODE_TIMER ? "TIMER" : "COUNTER");
+        }
+        else if (input.startsWith("TSET ")) {
+            String args = input.substring(5);
+            args.trim();
+            long sec = args.toInt();
+            if (args.length() > 0 && sec >= 0 && sec <= TIMER_SETPOINT_MAX_S) {
+                ct_timer_set_setpoint((uint32_t)sec);
+                Ch1TimerStatus_t t = ct_timer_get_status();
+                nvs_save_ch1_timer(t.setpoint_s, t.delay_off_s, t.out_mode);
+                Serial.printf("Timer setpoint = %ld s\n", sec);
+            } else {
+                Serial.printf("Usage: TSET <0..%d>\n", TIMER_SETPOINT_MAX_S);
+            }
+        }
+        else if (input.startsWith("TDELAY ")) {
+            String args = input.substring(7);
+            args.trim();
+            long sec = args.toInt();
+            if (args.length() > 0 && sec >= 0 && sec <= TIMER_SETPOINT_MAX_S) {
+                ct_timer_set_delay_off((uint32_t)sec);
+                Ch1TimerStatus_t t = ct_timer_get_status();
+                nvs_save_ch1_timer(t.setpoint_s, t.delay_off_s, t.out_mode);
+                Serial.printf("Timer delay-off = %ld s\n", sec);
+            } else {
+                Serial.printf("Usage: TDELAY <0..%d>\n", TIMER_SETPOINT_MAX_S);
+            }
+        }
+        else if (input.startsWith("TOUT ")) {
+            String args = input.substring(5);
+            args.trim();
+            bool valid = true;
+            if (args == "LATCH") {
+                ct_timer_set_out_mode(TIMER_OUT_LATCH);
+                Serial.println("Timer output mode = LATCH");
+            } else if (args == "DELAYOFF" || args == "DELAY") {
+                ct_timer_set_out_mode(TIMER_OUT_DELAY_OFF);
+                Serial.println("Timer output mode = DELAY-OFF");
+            } else {
+                valid = false;
+                Serial.println("Usage: TOUT LATCH|DELAYOFF");
+            }
+            if (valid) {
+                Ch1TimerStatus_t t = ct_timer_get_status();
+                nvs_save_ch1_timer(t.setpoint_s, t.delay_off_s, t.out_mode);
+            }
+        }
+        else if (input == "TRESET") {
+            ct_timer_reset();
+            Serial.println("CH1 timer reset (output OFF, countdown rearmed)");
+        }
+        else if (input == "TIMERSTAT" || input == "TSTAT") {
+            Ch1TimerStatus_t t = ct_timer_get_status();
+            Serial.println("\n=== CH1 TIMER STATUS ===");
+            Serial.printf("  CH1 mode  : %s\n",
+                          ch1_get_mode() == CH1_MODE_TIMER ? "TIMER" : "COUNTER");
+            Serial.printf("  State     : %s\n", ct_timer_state_to_string(t.state));
+            Serial.printf("  Remaining : %lu s\n", (unsigned long)t.remaining_s);
+            Serial.printf("  Setpoint  : %lu s\n", (unsigned long)t.setpoint_s);
+            Serial.printf("  Delay-off : %lu s\n", (unsigned long)t.delay_off_s);
+            Serial.printf("  Out mode  : %s\n",
+                          t.out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAY-OFF");
+            Serial.printf("  Output    : %s\n", t.output_state ? "ON" : "OFF");
+            Serial.println("========================\n");
+        }
+        // =================================================================
         // NVS CONFIGURATION COMMANDS
         // =================================================================
         else if (input == "SAVE") {
@@ -264,6 +337,13 @@ void serial_handler_loop() {
             cfg.ch2_edge_mode = ch2.edge_mode;
             cfg.ch2_filter = ch2.filter_value;
             cfg.ch2_preset_value = 10000; // TODO: Get from CT_counter
+
+            // CH1 countdown timer state
+            Ch1TimerStatus_t tmr = ct_timer_get_status();
+            cfg.ch1_op_mode = ch1_get_mode();
+            cfg.ch1_timer_setpoint_s = tmr.setpoint_s;
+            cfg.ch1_timer_delay_off_s = tmr.delay_off_s;
+            cfg.ch1_timer_out_mode = tmr.out_mode;
             
             cfg.modbus_address = MODBUS_SLAVE_ID;
             cfg.modbus_baud = MODBUS_BAUD_RATE;
@@ -422,6 +502,14 @@ void serial_handler_loop() {
             Serial.println("PRESET CH1|CH2 <value>");
             Serial.println("OUTPUT CH1|CH2 N|F|C|NONE");
             Serial.println("COUNTERS - Show counter status");
+            Serial.println("--- CH1 Countdown Timer ---");
+            Serial.println("CH1 TIMER    - Switch CH1 to countdown timer");
+            Serial.println("CH1 COUNTER  - Switch CH1 back to pulse counter");
+            Serial.println("TSET <sec>   - Countdown setpoint (0-99999)");
+            Serial.println("TDELAY <sec> - Delay-off release time (0-99999)");
+            Serial.println("TOUT LATCH|DELAYOFF - Output release mode");
+            Serial.println("TRESET       - Clear timer output, rearm countdown");
+            Serial.println("TSTAT        - Show CH1 timer status");
             Serial.println("--- Storage ---");
             Serial.println("SAVE     - Save config to NVS");
             Serial.println("LOAD     - Load config from NVS");

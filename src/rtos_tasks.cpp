@@ -11,6 +11,7 @@
 #include "modbus_rtu.h"
 #include "web_server.h"
 #include "CT_counter.h"
+#include "ct_timer.h"
 
 // =============================================================================
 // GLOBAL DEFINITIONS
@@ -205,10 +206,16 @@ void counterTask(void *pvParameters) {
         }
         
         // Process CT_counter instances (handles preset comparison & output)
+        // CH1 is either a counter or a countdown timer - exactly one of them
+        // may drive OUTPUT_CH1_PIN, so the two are mutually exclusive here.
         CT_counter* ctr1 = getCounterInstance(1);
         CT_counter* ctr2 = getCounterInstance(2);
-        if (ctr1) ctr1->process();
-        if (ctr2) ctr2->process();
+        if (ch1_get_mode() == CH1_MODE_TIMER) {
+            ct_timer_process();
+        } else if (ctr1) {
+            ctr1->process();
+        }
+        if (ctr2) ctr2->process();   // CH2 is always a counter
         
         // Run at 1ms interval
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(TASK_INTERVAL_COUNTER));

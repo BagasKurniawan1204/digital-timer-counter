@@ -5,6 +5,7 @@
 
 #include "counter_operation.h"
 #include "rtos_tasks.h"
+#include "ct_timer.h"
 
 // =============================================================================
 // ISR HANDLERS
@@ -264,7 +265,11 @@ void pcnt_reset() {
 }
 
 void pcnt_resume() {
-    pcnt_ch1_resume();
+    // CH1's PCNT unit must stay paused while CH1 runs as a countdown timer -
+    // the timer reads GPIO34/35 directly and owns the CH1 output.
+    if (ch1_get_mode() != CH1_MODE_TIMER) {
+        pcnt_ch1_resume();
+    }
     pcnt_ch2_resume();
 }
 
