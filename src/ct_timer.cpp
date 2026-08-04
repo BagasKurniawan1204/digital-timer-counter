@@ -1,6 +1,6 @@
 /**
  * @file ct_timer.cpp
- * @brief Channel 1 countdown timer implementation
+ * @brief Per-channel countdown timer implementation
  */
 
 #include "ct_timer.h"
@@ -15,43 +15,73 @@
 // MODULE STATE
 // =============================================================================
 
+#define TIMER_CH_COUNT  2
+
+// Per-channel countdown state. Time is accumulated in milliseconds so
+// pause/resume across the gate input does not lose fractions of a second;
+// remaining_s is derived for display.
+typedef struct {
+    ChOpMode     op_mode;
+    TimerState   state;
+    TimerOutMode out_mode;
+    bool         output_state;
+    bool         initialized;
+
+    uint32_t     setpoint_s;
+    uint32_t     delay_off_s;
+
+    uint32_t     remaining_ms;
+    uint32_t     delay_ms;      // Elapsed time in the delay-off phase
+    uint32_t     last_tick_ms;  // millis() at the previous process()
+
+    // Debounced input state (asserted = electrically active, see
+    // TIMER_INPUT_ACTIVE_LOW)
+    bool         gate_raw, gate_asserted;
+    uint32_t     gate_change_ms;
+    bool         reset_raw, reset_asserted;
+    uint32_t     reset_change_ms;
+} TimerCh_t;
+
 // Guards the state block against concurrent access between the counter task
-// (Core 1, writer) and the web/Modbus/serial readers (Core 0).
+// (Core 1, writer) and the web/Modbus/serial readers (Core 0). One lock covers
+// both channels: the critical sections are a handful of assignments each.
 static portMUX_TYPE timer_mux = portMUX_INITIALIZER_UNLOCKED;
 
-static Ch1Mode      s_ch1_mode      = CH1_MODE_COUNTER;
-static TimerState   s_state         = TIMER_IDLE;
-static TimerOutMode s_out_mode      = TIMER_OUT_LATCH;
-static bool         s_output_state  = false;
-static bool         s_initialized   = false;
+static TimerCh_t s_tmr[TIMER_CH_COUNT] = {
+    { CH_MODE_COUNTER, TIMER_IDLE, TIMER_OUT_LATCH, false, false,
+      TIMER_DEFAULT_SETPOINT_S, TIMER_DEFAULT_DELAY_OFF_S,
+      TIMER_DEFAULT_SETPOINT_S * 1000UL, 0, 0,
+      false, false, 0, false, false, 0 },
+    { CH_MODE_COUNTER, TIMER_IDLE, TIMER_OUT_LATCH, false, false,
+      TIMER_DEFAULT_SETPOINT_S, TIMER_DEFAULT_DELAY_OFF_S,
+      TIMER_DEFAULT_SETPOINT_S * 1000UL, 0, 0,
+      false, false, 0, false, false, 0 },
+};
 
-static uint32_t s_setpoint_s   = TIMER_DEFAULT_SETPOINT_S;
-static uint32_t s_delay_off_s  = TIMER_DEFAULT_DELAY_OFF_S;
-
-// Time is accumulated in milliseconds so pause/resume across the gate input
-// does not lose fractions of a second. remaining_s is derived for display.
-static uint32_t s_remaining_ms = TIMER_DEFAULT_SETPOINT_S * 1000UL;
-static uint32_t s_delay_ms     = 0;     // Elapsed time in the delay-off phase
-static uint32_t s_last_tick_ms = 0;     // millis() at the previous process()
-
-// Debounced input state (asserted = electrically active, see CH1_TIMER_ACTIVE_LOW)
-static bool     s_gate_asserted   = false;
-static bool     s_gate_raw        = false;
-static uint32_t s_gate_change_ms  = 0;
-static bool     s_reset_asserted  = false;
-static bool     s_reset_raw       = false;
-static uint32_t s_reset_change_ms = 0;
+// Pin assignment per channel, so no function below names a specific GPIO.
+static const struct {
+    uint8_t gate;
+    uint8_t reset;
+    uint8_t out;
+} TMR_PINS[TIMER_CH_COUNT] = {
+    { COUNTER_CH1_PULSE_PIN, COUNTER_CH1_CTRL_PIN, OUTPUT_CH1_PIN },
+    { COUNTER_CH2_PULSE_PIN, COUNTER_CH2_CTRL_PIN, OUTPUT_CH2_PIN },
+};
 
 // =============================================================================
 // HELPERS
 // =============================================================================
 
+static inline bool ch_valid(uint8_t channel) {
+    return channel < TIMER_CH_COUNT;
+}
+
 /**
- * @brief Read a CH1 timer input and normalise it to "asserted"
- * GPIO34/35 sit behind external pull-ups, so asserted means LOW.
+ * @brief Read a timer input and normalise it to "asserted"
+ * All four input pins sit behind external pull-ups, so asserted means LOW.
  */
 static inline bool read_asserted(uint8_t pin) {
-#if CH1_TIMER_ACTIVE_LOW
+#if TIMER_INPUT_ACTIVE_LOW
     return digitalRead(pin) == LOW;
 #else
     return digitalRead(pin) == HIGH;
@@ -59,27 +89,29 @@ static inline bool read_asserted(uint8_t pin) {
 }
 
 /**
- * @brief Drive OUTPUT_CH1_PIN and mirror the state into shared system data
+ * @brief Drive a channel's output pin and mirror the state into shared data
  */
-static void set_output(bool on) {
-    if (s_output_state == on) {
+static void set_output(uint8_t channel, bool on) {
+    TimerCh_t *t = &s_tmr[channel];
+
+    if (t->output_state == on) {
         return;
     }
-    s_output_state = on;
-    digitalWrite(OUTPUT_CH1_PIN, on ? HIGH : LOW);
+    t->output_state = on;
+    digitalWrite(TMR_PINS[channel].out, on ? HIGH : LOW);
 
     if (dataMutex && xSemaphoreTake(dataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        systemData.channel[0].output_state = on;
+        systemData.channel[channel].output_state = on;
         xSemaphoreGive(dataMutex);
     }
 }
 
 /**
- * @brief Rearm the countdown from the configured setpoint
+ * @brief Rearm a channel's countdown from its configured setpoint
  */
-static void arm_countdown() {
-    s_remaining_ms = s_setpoint_s * 1000UL;
-    s_delay_ms = 0;
+static void arm_countdown(TimerCh_t *t) {
+    t->remaining_ms = t->setpoint_s * 1000UL;
+    t->delay_ms = 0;
 }
 
 /**
@@ -117,110 +149,125 @@ static bool debounce_input(uint8_t pin, bool* raw, bool* stable,
 // INITIALIZATION
 // =============================================================================
 
-void ct_timer_init() {
-    // GPIO34/35 are input-only and have no internal pull-ups; the board
-    // provides external ones, so plain INPUT is the only valid configuration.
-    pinMode(COUNTER_CH1_PULSE_PIN, INPUT);
-    pinMode(COUNTER_CH1_CTRL_PIN, INPUT);
+void ct_timer_init(uint8_t channel) {
+    if (!ch_valid(channel)) {
+        return;
+    }
+
+    TimerCh_t *t = &s_tmr[channel];
+
+    // CH1 is on GPIO34/35, which are input-only and have no internal pull-ups;
+    // the board provides external ones, so plain INPUT is the only valid
+    // configuration there. CH2's GPIO32/33 do support internal pull-ups, so
+    // they are enabled as a backstop alongside the external ones.
+    pinMode(TMR_PINS[channel].gate, channel == 0 ? INPUT : INPUT_PULLUP);
+    pinMode(TMR_PINS[channel].reset, channel == 0 ? INPUT : INPUT_PULLUP);
 
     uint32_t now = millis();
 
     portENTER_CRITICAL(&timer_mux);
-    s_state = TIMER_IDLE;
-    arm_countdown();
-    s_last_tick_ms = now;
+    t->state = TIMER_IDLE;
+    arm_countdown(t);
+    t->last_tick_ms = now;
 
     // Seed the debounce state from the current pin levels so a pin that is
     // already asserted at boot does not register a spurious edge.
-    s_gate_raw = s_gate_asserted = read_asserted(COUNTER_CH1_PULSE_PIN);
-    s_reset_raw = s_reset_asserted = read_asserted(COUNTER_CH1_CTRL_PIN);
-    s_gate_change_ms = now;
-    s_reset_change_ms = now;
+    t->gate_raw = t->gate_asserted = read_asserted(TMR_PINS[channel].gate);
+    t->reset_raw = t->reset_asserted = read_asserted(TMR_PINS[channel].reset);
+    t->gate_change_ms = now;
+    t->reset_change_ms = now;
 
-    s_initialized = true;
+    t->initialized = true;
     portEXIT_CRITICAL(&timer_mux);
 
-    set_output(false);
+    set_output(channel, false);
 
-    Serial.printf("[CT_timer] Initialized (setpoint=%lus, delay_off=%lus, mode=%s)\n",
-                  (unsigned long)s_setpoint_s,
-                  (unsigned long)s_delay_off_s,
-                  s_out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAY-OFF");
+    Serial.printf("[CT_timer] CH%u initialized (setpoint=%lus, delay_off=%lus, mode=%s)\n",
+                  (unsigned)(channel + 1),
+                  (unsigned long)t->setpoint_s,
+                  (unsigned long)t->delay_off_s,
+                  t->out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAY-OFF");
 }
 
 // =============================================================================
 // STATE MACHINE
 // =============================================================================
 
-void ct_timer_process() {
-    if (!s_initialized) {
-        ct_timer_init();
+void ct_timer_process(uint8_t channel) {
+    if (!ch_valid(channel)) {
+        return;
+    }
+
+    TimerCh_t *t = &s_tmr[channel];
+
+    if (!t->initialized) {
+        ct_timer_init(channel);
         return;
     }
 
     uint32_t now = millis();
-    uint32_t dt = now - s_last_tick_ms;
-    s_last_tick_ms = now;
+    uint32_t dt = now - t->last_tick_ms;
+    t->last_tick_ms = now;
 
     // Sample both inputs every tick so the debounce timers keep advancing
-    bool gate_edge = debounce_input(COUNTER_CH1_PULSE_PIN, &s_gate_raw,
-                                    &s_gate_asserted, &s_gate_change_ms, now);
-    bool reset_edge = debounce_input(COUNTER_CH1_CTRL_PIN, &s_reset_raw,
-                                     &s_reset_asserted, &s_reset_change_ms, now);
+    bool gate_edge = debounce_input(TMR_PINS[channel].gate, &t->gate_raw,
+                                    &t->gate_asserted, &t->gate_change_ms, now);
+    bool reset_edge = debounce_input(TMR_PINS[channel].reset, &t->reset_raw,
+                                     &t->reset_asserted, &t->reset_change_ms, now);
     (void)gate_edge;   // The gate is level-driven; the edge itself is implicit
 
     // The reset input wins over everything else, in any state and either
     // output mode.
     if (reset_edge) {
-        ct_timer_reset();
+        ct_timer_reset(channel);
         return;
     }
 
     portENTER_CRITICAL(&timer_mux);
-    TimerState state = s_state;
-    bool want_output = s_output_state;
+    TimerState state = t->state;
+    bool want_output = t->output_state;
 
     switch (state) {
         case TIMER_IDLE:
             want_output = false;
-            if (s_gate_asserted) {
-                arm_countdown();
+            if (t->gate_asserted) {
+                arm_countdown(t);
                 state = TIMER_RUNNING;
             }
             break;
 
         case TIMER_RUNNING:
             want_output = false;
-            if (!s_gate_asserted) {
+            if (!t->gate_asserted) {
                 // Gate released mid-count: hold the remaining time
                 state = TIMER_PAUSED;
                 break;
             }
-            if (s_remaining_ms <= dt) {
-                s_remaining_ms = 0;
-                s_delay_ms = 0;
+            if (t->remaining_ms <= dt) {
+                t->remaining_ms = 0;
+                t->delay_ms = 0;
                 state = TIMER_OUT;
                 want_output = true;
             } else {
-                s_remaining_ms -= dt;
+                t->remaining_ms -= dt;
             }
             break;
 
         case TIMER_PAUSED:
             want_output = false;
-            if (s_gate_asserted) {
+            if (t->gate_asserted) {
                 state = TIMER_RUNNING;
             }
             break;
 
         case TIMER_OUT:
             want_output = true;
-            if (s_out_mode == TIMER_OUT_DELAY_OFF) {
-                s_delay_ms += dt;
-                if (s_delay_ms >= (s_delay_off_s * 1000UL)) {
+            if (t->out_mode == TIMER_OUT_DELAY_OFF) {
+                t->delay_ms += dt;
+                if (t->delay_ms >= (t->delay_off_s * 1000UL)) {
                     // Release the output and rearm. If the gate is still held
                     // the next tick starts a fresh countdown immediately.
-                    arm_countdown();
+                    arm_countdown(t);
                     state = TIMER_IDLE;
                     want_output = false;
                 }
@@ -229,86 +276,118 @@ void ct_timer_process() {
             break;
     }
 
-    bool state_changed = (state != s_state);
-    s_state = state;
+    bool state_changed = (state != t->state);
+    t->state = state;
+    uint32_t remaining_ms = t->remaining_ms;
     portEXIT_CRITICAL(&timer_mux);
 
-    set_output(want_output);
+    set_output(channel, want_output);
 
     if (state_changed) {
-        Serial.printf("[CT_timer] State -> %s (remaining=%lus)\n",
+        Serial.printf("[CT_timer] CH%u state -> %s (remaining=%lus)\n",
+                      (unsigned)(channel + 1),
                       ct_timer_state_to_string(state),
-                      (unsigned long)((s_remaining_ms + 999UL) / 1000UL));
+                      (unsigned long)((remaining_ms + 999UL) / 1000UL));
     }
 }
 
-void ct_timer_reset() {
+void ct_timer_reset(uint8_t channel) {
+    if (!ch_valid(channel)) {
+        return;
+    }
+
+    TimerCh_t *t = &s_tmr[channel];
+
     portENTER_CRITICAL(&timer_mux);
-    s_state = TIMER_IDLE;
-    arm_countdown();
-    s_last_tick_ms = millis();
+    t->state = TIMER_IDLE;
+    arm_countdown(t);
+    t->last_tick_ms = millis();
     portEXIT_CRITICAL(&timer_mux);
 
-    set_output(false);
+    set_output(channel, false);
 
-    Serial.println("[CT_timer] Reset - output OFF, countdown rearmed");
+    Serial.printf("[CT_timer] CH%u reset - output OFF, countdown rearmed\n",
+                  (unsigned)(channel + 1));
 }
 
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
-void ct_timer_set_setpoint(uint32_t seconds) {
+void ct_timer_set_setpoint(uint8_t channel, uint32_t seconds) {
+    if (!ch_valid(channel)) {
+        return;
+    }
+
     if (seconds > TIMER_SETPOINT_MAX_S) {
         seconds = TIMER_SETPOINT_MAX_S;
     }
 
+    TimerCh_t *t = &s_tmr[channel];
+
     portENTER_CRITICAL(&timer_mux);
-    s_setpoint_s = seconds;
+    t->setpoint_s = seconds;
     // A setpoint change only takes effect on the next arm, except when the
     // timer is sitting idle - there it should show the new value right away.
-    if (s_state == TIMER_IDLE) {
-        arm_countdown();
+    if (t->state == TIMER_IDLE) {
+        arm_countdown(t);
     }
     portEXIT_CRITICAL(&timer_mux);
 
-    Serial.printf("[CT_timer] Setpoint set to %lu s\n", (unsigned long)seconds);
+    Serial.printf("[CT_timer] CH%u setpoint set to %lu s\n",
+                  (unsigned)(channel + 1), (unsigned long)seconds);
 }
 
-void ct_timer_set_delay_off(uint32_t seconds) {
+void ct_timer_set_delay_off(uint8_t channel, uint32_t seconds) {
+    if (!ch_valid(channel)) {
+        return;
+    }
+
     if (seconds > TIMER_SETPOINT_MAX_S) {
         seconds = TIMER_SETPOINT_MAX_S;
     }
 
     portENTER_CRITICAL(&timer_mux);
-    s_delay_off_s = seconds;
+    s_tmr[channel].delay_off_s = seconds;
     portEXIT_CRITICAL(&timer_mux);
 
-    Serial.printf("[CT_timer] Delay-off set to %lu s\n", (unsigned long)seconds);
+    Serial.printf("[CT_timer] CH%u delay-off set to %lu s\n",
+                  (unsigned)(channel + 1), (unsigned long)seconds);
 }
 
-void ct_timer_set_out_mode(TimerOutMode mode) {
+void ct_timer_set_out_mode(uint8_t channel, TimerOutMode mode) {
+    if (!ch_valid(channel)) {
+        return;
+    }
+
     portENTER_CRITICAL(&timer_mux);
-    s_out_mode = mode;
-    s_delay_ms = 0;
+    s_tmr[channel].out_mode = mode;
+    s_tmr[channel].delay_ms = 0;
     portEXIT_CRITICAL(&timer_mux);
 
-    Serial.printf("[CT_timer] Output mode set to %s\n",
+    Serial.printf("[CT_timer] CH%u output mode set to %s\n",
+                  (unsigned)(channel + 1),
                   mode == TIMER_OUT_LATCH ? "LATCH" : "DELAY-OFF");
 }
 
-Ch1TimerStatus_t ct_timer_get_status() {
-    Ch1TimerStatus_t status;
+ChTimerStatus_t ct_timer_get_status(uint8_t channel) {
+    ChTimerStatus_t status = {TIMER_IDLE, 0, 0, 0, TIMER_OUT_LATCH, false};
+
+    if (!ch_valid(channel)) {
+        return status;
+    }
+
+    const TimerCh_t *t = &s_tmr[channel];
 
     portENTER_CRITICAL(&timer_mux);
-    status.state = s_state;
+    status.state = t->state;
     // Round up so a partially elapsed second still reads as 1, and only
     // shows 0 once the countdown has genuinely finished.
-    status.remaining_s = (s_remaining_ms + 999UL) / 1000UL;
-    status.setpoint_s = s_setpoint_s;
-    status.delay_off_s = s_delay_off_s;
-    status.out_mode = s_out_mode;
-    status.output_state = s_output_state;
+    status.remaining_s = (t->remaining_ms + 999UL) / 1000UL;
+    status.setpoint_s = t->setpoint_s;
+    status.delay_off_s = t->delay_off_s;
+    status.out_mode = t->out_mode;
+    status.output_state = t->output_state;
     portEXIT_CRITICAL(&timer_mux);
 
     return status;
@@ -325,47 +404,76 @@ const char* ct_timer_state_to_string(TimerState state) {
 }
 
 // =============================================================================
-// CHANNEL 1 MODE SWITCHING
+// CHANNEL MODE SWITCHING
 // =============================================================================
 
-void ch1_set_mode(Ch1Mode mode) {
-    if (mode == s_ch1_mode && s_initialized) {
+// The PCNT helpers are separate named functions per channel rather than an
+// array, so the handover picks them with a small switch.
+static void pcnt_ch_pause(uint8_t channel) {
+    if (channel == 0) pcnt_ch1_pause();
+    else              pcnt_ch2_pause();
+}
+
+static void pcnt_ch_reset(uint8_t channel) {
+    if (channel == 0) pcnt_ch1_reset();
+    else              pcnt_ch2_reset();
+}
+
+static void pcnt_ch_resume(uint8_t channel) {
+    if (channel == 0) pcnt_ch1_resume();
+    else              pcnt_ch2_resume();
+}
+
+void ch_set_mode(uint8_t channel, ChOpMode mode) {
+    if (!ch_valid(channel)) {
         return;
     }
 
-    if (mode == CH1_MODE_TIMER) {
-        // Hand the CH1 input pins over from PCNT to the timer. The PCNT
-        // glitch filter goes away with it, hence the software debounce.
-        pcnt_ch1_pause();
-        s_ch1_mode = CH1_MODE_TIMER;
-        ct_timer_init();
+    TimerCh_t *t = &s_tmr[channel];
 
-        CT_counter* ctr1 = getCounterInstance(1);
-        if (ctr1) {
-            ctr1->disable();
+    if (mode == t->op_mode && t->initialized) {
+        return;
+    }
+
+    // getCounterInstance() is 1-based
+    CT_counter* ctr = getCounterInstance(channel + 1);
+
+    if (mode == CH_MODE_TIMER) {
+        // Hand the channel's input pins over from PCNT to the timer. The PCNT
+        // glitch filter goes away with it, hence the software debounce.
+        pcnt_ch_pause(channel);
+        t->op_mode = CH_MODE_TIMER;
+        ct_timer_init(channel);
+
+        if (ctr) {
+            ctr->disable();
         }
 
-        Serial.println("[CT_timer] CH1 switched to TIMER mode");
+        Serial.printf("[CT_timer] CH%u switched to TIMER mode\n",
+                      (unsigned)(channel + 1));
     } else {
         // Release the output before the counter takes over the pin again
-        s_ch1_mode = CH1_MODE_COUNTER;
-        ct_timer_reset();
+        t->op_mode = CH_MODE_COUNTER;
+        ct_timer_reset(channel);
 
         // Rebuild the PCNT unit from the stored channel config
-        ChannelInputConfig_t cfg = input_config_get(0);
-        input_config_set_mode(0, &cfg);
-        pcnt_ch1_reset();
-        pcnt_ch1_resume();
+        ChannelInputConfig_t cfg = input_config_get(channel);
+        input_config_set_mode(channel, &cfg);
+        pcnt_ch_reset(channel);
+        pcnt_ch_resume(channel);
 
-        CT_counter* ctr1 = getCounterInstance(1);
-        if (ctr1) {
-            ctr1->enable();
+        if (ctr) {
+            ctr->enable();
         }
 
-        Serial.println("[CT_timer] CH1 switched to COUNTER mode");
+        Serial.printf("[CT_timer] CH%u switched to COUNTER mode\n",
+                      (unsigned)(channel + 1));
     }
 }
 
-Ch1Mode ch1_get_mode() {
-    return s_ch1_mode;
+ChOpMode ch_get_mode(uint8_t channel) {
+    if (!ch_valid(channel)) {
+        return CH_MODE_COUNTER;
+    }
+    return s_tmr[channel].op_mode;
 }

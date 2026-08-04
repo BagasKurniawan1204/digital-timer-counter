@@ -76,12 +76,26 @@
 
     <div class="channel-box">
       <span class="ch-label">Channel 2</span>
-      <p>Count: <span class="status-value" id="ch2-count">0</span></p>
-      <p>Freq: <span id="ch2-freq">0</span> Hz</p>
-      <p>Mode: <span id="ch2-mode">UP</span></p>
-      <p>Preset: <span id="ch2-preset-display">10000</span></p>
+      <span class="mode-badge" id="ch2-mode-badge">COUNTER</span>
+
+      <!-- Counter readouts (hidden in timer mode) -->
+      <div id="ch2-counter-status">
+        <p>Count: <span class="status-value" id="ch2-count">0</span></p>
+        <p>Freq: <span id="ch2-freq">0</span> Hz</p>
+        <p>Mode: <span id="ch2-mode">UP</span></p>
+        <p>Preset: <span id="ch2-preset-display">10000</span></p>
+      </div>
+
+      <!-- Timer readouts (hidden in counter mode) -->
+      <div id="ch2-timer-status" class="hidden">
+        <p>Remaining: <span class="status-value" id="t2-remaining">0</span> s</p>
+        <p>Setpoint: <span id="t2-setpoint-display">10</span> s</p>
+        <p>State: <span class="t-state" id="t2-state">IDLE</span></p>
+        <p>Out mode: <span id="t2-outmode-display">LATCH</span></p>
+      </div>
+
       <p>Output: <span id="ch2-output" class="output-off">OFF</span></p>
-      <p>
+      <p id="ch2-manual-row">
         Manual:
         <button class="btn-small" id="btn-ch2-plus">+</button>
         <button class="btn-small" id="btn-ch2-minus">-</button>
@@ -91,6 +105,7 @@
         <button class="btn-small button" id="btn-ch2-out-on">ON</button>
         <button class="btn-small button2" id="btn-ch2-out-off">OFF</button>
         <button class="btn-small" id="btn-ch2-out-auto">AUTO</button>
+        <button class="btn-small" id="btn-ch2-timer-reset">Tmr RST</button>
       </p>
     </div>
   </div>
@@ -160,26 +175,57 @@
     <div class="channel-box">
       <span class="ch-label">Channel 2</span>
       <div class="form-row">
-        <label>Mode:</label>
-        <select id="cfg-ch2-mode">
-          <option value="UP">UP (Count Up)</option>
-          <option value="DN">DN (Count Down)</option>
-          <option value="UDA">UDA (Up/Down)</option>
-          <option value="UDC">UDC (Encoder)</option>
+        <label>Type:</label>
+        <select id="cfg-ch2-type">
+          <option value="counter">Counter</option>
+          <option value="timer">Timer</option>
         </select>
       </div>
-      <div class="form-row">
-        <label>Preset:</label>
-        <input type="number" id="cfg-ch2-preset" value="10000" min="0">
+
+      <!-- Counter settings (disabled in timer mode) -->
+      <div id="cfg-ch2-counter">
+        <div class="form-row">
+          <label>Mode:</label>
+          <select id="cfg-ch2-mode">
+            <option value="UP">UP (Count Up)</option>
+            <option value="DN">DN (Count Down)</option>
+            <option value="UDA">UDA (Up/Down)</option>
+            <option value="UDC">UDC (Encoder)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Preset:</label>
+          <input type="number" id="cfg-ch2-preset" value="10000" min="0">
+        </div>
+        <div class="form-row">
+          <label>Edge:</label>
+          <select id="cfg-ch2-edge">
+            <option value="RISING">Rising</option>
+            <option value="FALLING">Falling</option>
+            <option value="BOTH">Both</option>
+          </select>
+        </div>
       </div>
-      <div class="form-row">
-        <label>Edge:</label>
-        <select id="cfg-ch2-edge">
-          <option value="RISING">Rising</option>
-          <option value="FALLING">Falling</option>
-          <option value="BOTH">Both</option>
-        </select>
+
+      <!-- Timer settings (visible in timer mode) -->
+      <div id="cfg-ch2-timer" class="timer-panel hidden">
+        <div class="form-row">
+          <label>Setpoint:</label>
+          <input type="number" id="cfg-ch2-tset" value="10" min="0" max="99999"> <span style="font-size:11px;color:#666;">sec</span>
+        </div>
+        <div class="form-row">
+          <label>Delay Off:</label>
+          <input type="number" id="cfg-ch2-tdelay" value="5" min="0" max="99999"> <span style="font-size:11px;color:#666;">sec</span>
+        </div>
+        <div class="form-row">
+          <label>Out Mode:</label>
+          <select id="cfg-ch2-toutmode">
+            <option value="latch">Latching</option>
+            <option value="delayoff">Delay Off</option>
+          </select>
+        </div>
       </div>
+
       <button class="btn-small button" id="btn-ch2-apply">Apply</button>
       <button class="btn-small button2" id="btn-ch2-reset">Reset</button>
     </div>
@@ -220,7 +266,8 @@
   const EDITABLE_FIELDS = [
     "cfg-ch1-preset", "cfg-ch1-tset", "cfg-ch1-tdelay", "cfg-ch1-toutmode",
     "cfg-ch1-mode", "cfg-ch1-edge",
-    "cfg-ch2-preset", "cfg-ch2-mode", "cfg-ch2-edge"
+    "cfg-ch2-preset", "cfg-ch2-tset", "cfg-ch2-tdelay", "cfg-ch2-toutmode",
+    "cfg-ch2-mode", "cfg-ch2-edge"
   ];
 
   EDITABLE_FIELDS.forEach(id => {
@@ -250,24 +297,25 @@
     if (el) el.value = value;
   }
 
-  // --- CH1 counter/timer view switching ---
-  let ch1IsTimer = false;
+  // --- Per-channel counter/timer view switching ---
+  // ch is 1 or 2, matching the element id prefixes.
+  const chIsTimer = { 1: false, 2: false };
 
-  function applyCh1Type(isTimer) {
-    ch1IsTimer = isTimer;
+  function applyChType(ch, isTimer) {
+    chIsTimer[ch] = isTimer;
 
-    document.getElementById("ch1-counter-status").classList.toggle("hidden", isTimer);
-    document.getElementById("ch1-timer-status").classList.toggle("hidden", !isTimer);
-    document.getElementById("ch1-manual-row").classList.toggle("hidden", isTimer);
-    document.getElementById("cfg-ch1-counter").classList.toggle("hidden", isTimer);
-    document.getElementById("cfg-ch1-timer").classList.toggle("hidden", !isTimer);
+    document.getElementById(`ch${ch}-counter-status`).classList.toggle("hidden", isTimer);
+    document.getElementById(`ch${ch}-timer-status`).classList.toggle("hidden", !isTimer);
+    document.getElementById(`ch${ch}-manual-row`).classList.toggle("hidden", isTimer);
+    document.getElementById(`cfg-ch${ch}-counter`).classList.toggle("hidden", isTimer);
+    document.getElementById(`cfg-ch${ch}-timer`).classList.toggle("hidden", !isTimer);
 
-    const badge = document.getElementById("ch1-mode-badge");
+    const badge = document.getElementById(`ch${ch}-mode-badge`);
     badge.textContent = isTimer ? "TIMER" : "COUNTER";
     badge.className = isTimer ? "mode-badge timer" : "mode-badge";
 
     // Keep the type selector in sync when the change came from the device
-    const sel = document.getElementById("cfg-ch1-type");
+    const sel = document.getElementById(`cfg-ch${ch}-type`);
     const want = isTimer ? "timer" : "counter";
     if (sel.value !== want) sel.value = want;
   }
@@ -295,7 +343,7 @@
       }
 
       // Channel 1 timer mode
-      if (d.ch1_mode_type !== undefined) applyCh1Type(d.ch1_mode_type === "TIMER");
+      if (d.ch1_mode_type !== undefined) applyChType(1, d.ch1_mode_type === "TIMER");
       if (d.t_remaining !== undefined) document.getElementById("t-remaining").textContent = d.t_remaining;
       if (d.t_setpoint !== undefined) document.getElementById("t-setpoint-display").textContent = d.t_setpoint;
       if (d.t_state !== undefined) document.getElementById("t-state").textContent = d.t_state;
@@ -303,7 +351,7 @@
         document.getElementById("t-outmode-display").textContent =
           d.t_outmode === "LATCH" ? "LATCHING" : "DELAY OFF";
       }
-      
+
       // Channel 2 data
       if (d.ch2_count !== undefined) document.getElementById("ch2-count").textContent = d.ch2_count;
       if (d.ch2_freq !== undefined) document.getElementById("ch2-freq").textContent = d.ch2_freq;
@@ -314,7 +362,17 @@
         el.textContent = d.ch2_out ? "ON" : "OFF";
         el.className = d.ch2_out ? "output-on" : "output-off";
       }
-      
+
+      // Channel 2 timer mode
+      if (d.ch2_mode_type !== undefined) applyChType(2, d.ch2_mode_type === "TIMER");
+      if (d.t2_remaining !== undefined) document.getElementById("t2-remaining").textContent = d.t2_remaining;
+      if (d.t2_setpoint !== undefined) document.getElementById("t2-setpoint-display").textContent = d.t2_setpoint;
+      if (d.t2_state !== undefined) document.getElementById("t2-state").textContent = d.t2_state;
+      if (d.t2_outmode !== undefined) {
+        document.getElementById("t2-outmode-display").textContent =
+          d.t2_outmode === "LATCH" ? "LATCHING" : "DELAY OFF";
+      }
+
       // Timer
       if (d.timer !== undefined) document.getElementById("timer-val").textContent = d.timer;
       
@@ -329,6 +387,11 @@
       syncField("cfg-ch1-tdelay", d.t_delay);
       if (d.t_outmode !== undefined) {
         syncField("cfg-ch1-toutmode", d.t_outmode === "LATCH" ? "latch" : "delayoff");
+      }
+      syncField("cfg-ch2-tset", d.t2_setpoint);
+      syncField("cfg-ch2-tdelay", d.t2_delay);
+      if (d.t2_outmode !== undefined) {
+        syncField("cfg-ch2-toutmode", d.t2_outmode === "LATCH" ? "latch" : "delayoff");
       }
 
     } catch(e) {
@@ -378,46 +441,39 @@
   document.getElementById('btn-timer-disable').onclick = () => apiCall('/timer/disable');
   document.getElementById('btn-timer-reset').onclick = () => apiCall('/timer/reset');
 
-  // --- Channel 1 config ---
-  // Switching type takes effect immediately so the device hands GPIO25 over
-  // to the right owner before any other setting is applied.
-  document.getElementById('cfg-ch1-type').onchange = (e) => {
-    const type = e.target.value;
-    applyCh1Type(type === "timer");
-    apiCall(`/ch1/mode?type=${type}`, true);
-  };
+  // --- Channel config (identical for both channels) ---
+  [1, 2].forEach(ch => {
+    // Switching type takes effect immediately so the device hands the output
+    // pin over to the right owner before any other setting is applied.
+    document.getElementById(`cfg-ch${ch}-type`).onchange = (e) => {
+      const type = e.target.value;
+      applyChType(ch, type === "timer");
+      apiCall(`/ch${ch}/mode?type=${type}`, true);
+    };
 
-  document.getElementById('btn-ch1-apply').onclick = () => {
-    if (ch1IsTimer) {
-      const sec = document.getElementById('cfg-ch1-tset').value;
-      const delay = document.getElementById('cfg-ch1-tdelay').value;
-      const outmode = document.getElementById('cfg-ch1-toutmode').value;
-      apiCall(`/ch1/timer/set?sec=${sec}&delay=${delay}&outmode=${outmode}`, true,
-              ['cfg-ch1-tset', 'cfg-ch1-tdelay', 'cfg-ch1-toutmode']);
-    } else {
-      const mode = document.getElementById('cfg-ch1-mode').value;
-      const preset = document.getElementById('cfg-ch1-preset').value;
-      const edge = document.getElementById('cfg-ch1-edge').value;
-      apiCall(`/config/ch1?mode=${mode}&preset=${preset}&edge=${edge}`, true,
-              ['cfg-ch1-mode', 'cfg-ch1-preset', 'cfg-ch1-edge']);
-    }
-  };
+    document.getElementById(`btn-ch${ch}-apply`).onclick = () => {
+      if (chIsTimer[ch]) {
+        const sec = document.getElementById(`cfg-ch${ch}-tset`).value;
+        const delay = document.getElementById(`cfg-ch${ch}-tdelay`).value;
+        const outmode = document.getElementById(`cfg-ch${ch}-toutmode`).value;
+        apiCall(`/ch${ch}/timer/set?sec=${sec}&delay=${delay}&outmode=${outmode}`, true,
+                [`cfg-ch${ch}-tset`, `cfg-ch${ch}-tdelay`, `cfg-ch${ch}-toutmode`]);
+      } else {
+        const mode = document.getElementById(`cfg-ch${ch}-mode`).value;
+        const preset = document.getElementById(`cfg-ch${ch}-preset`).value;
+        const edge = document.getElementById(`cfg-ch${ch}-edge`).value;
+        apiCall(`/config/ch${ch}?mode=${mode}&preset=${preset}&edge=${edge}`, true,
+                [`cfg-ch${ch}-mode`, `cfg-ch${ch}-preset`, `cfg-ch${ch}-edge`]);
+      }
+    };
 
-  // Reset clears the timer output in timer mode, the count in counter mode
-  document.getElementById('btn-ch1-reset').onclick = () =>
-    apiCall(ch1IsTimer ? '/ch1/timer/reset' : '/counter/reset/1');
+    // Reset clears the timer output in timer mode, the count in counter mode
+    document.getElementById(`btn-ch${ch}-reset`).onclick = () =>
+      apiCall(chIsTimer[ch] ? `/ch${ch}/timer/reset` : `/counter/reset/${ch}`);
 
-  document.getElementById('btn-ch1-timer-reset').onclick = () => apiCall('/ch1/timer/reset');
-
-  // --- Channel 2 config ---
-  document.getElementById('btn-ch2-apply').onclick = () => {
-    const mode = document.getElementById('cfg-ch2-mode').value;
-    const preset = document.getElementById('cfg-ch2-preset').value;
-    const edge = document.getElementById('cfg-ch2-edge').value;
-    apiCall(`/config/ch2?mode=${mode}&preset=${preset}&edge=${edge}`, true,
-            ['cfg-ch2-mode', 'cfg-ch2-preset', 'cfg-ch2-edge']);
-  };
-  document.getElementById('btn-ch2-reset').onclick = () => apiCall('/counter/reset/2');
+    document.getElementById(`btn-ch${ch}-timer-reset`).onclick = () =>
+      apiCall(`/ch${ch}/timer/reset`);
+  });
 
   // --- NVS controls ---
   document.getElementById('btn-save-nvs').onclick = () => apiCall('/config/save', true);
@@ -438,14 +494,22 @@
         if (cfg.ch2_preset) document.getElementById('cfg-ch2-preset').value = cfg.ch2_preset;
         if (cfg.ch2_edge) document.getElementById('cfg-ch2-edge').value = cfg.ch2_edge;
 
-        // CH1 timer settings (use != null so a stored 0 is still applied)
+        // Timer settings (use != null so a stored 0 is still applied)
         if (cfg.t_setpoint != null) document.getElementById('cfg-ch1-tset').value = cfg.t_setpoint;
         if (cfg.t_delay != null) document.getElementById('cfg-ch1-tdelay').value = cfg.t_delay;
         if (cfg.t_outmode) {
           document.getElementById('cfg-ch1-toutmode').value =
             cfg.t_outmode === "LATCH" ? "latch" : "delayoff";
         }
-        if (cfg.ch1_mode_type) applyCh1Type(cfg.ch1_mode_type === "TIMER");
+        if (cfg.ch1_mode_type) applyChType(1, cfg.ch1_mode_type === "TIMER");
+
+        if (cfg.t2_setpoint != null) document.getElementById('cfg-ch2-tset').value = cfg.t2_setpoint;
+        if (cfg.t2_delay != null) document.getElementById('cfg-ch2-tdelay').value = cfg.t2_delay;
+        if (cfg.t2_outmode) {
+          document.getElementById('cfg-ch2-toutmode').value =
+            cfg.t2_outmode === "LATCH" ? "latch" : "delayoff";
+        }
+        if (cfg.ch2_mode_type) applyChType(2, cfg.ch2_mode_type === "TIMER");
       }
     });
     document.getElementById('sys-ip').textContent = window.location.host;

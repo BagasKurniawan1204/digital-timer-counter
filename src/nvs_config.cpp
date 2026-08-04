@@ -58,7 +58,7 @@ void nvs_config_get_defaults(StoredConfig_t* config) {
     config->ch1_filter = 100;
 
     // Channel 1 timer mode defaults
-    config->ch1_op_mode = CH1_MODE_COUNTER;
+    config->ch1_op_mode = CH_MODE_COUNTER;
     config->ch1_timer_setpoint_s = TIMER_DEFAULT_SETPOINT_S;
     config->ch1_timer_delay_off_s = TIMER_DEFAULT_DELAY_OFF_S;
     config->ch1_timer_out_mode = TIMER_OUT_LATCH;
@@ -68,7 +68,14 @@ void nvs_config_get_defaults(StoredConfig_t* config) {
     config->ch2_edge_mode = EDGE_RISING;
     config->ch2_preset_value = 10000;
     config->ch2_filter = 100;
-    
+
+    // Channel 2 timer mode defaults
+    config->ch2_op_mode = CH_MODE_COUNTER;
+    config->ch2_timer_setpoint_s = TIMER_DEFAULT_SETPOINT_S;
+    config->ch2_timer_delay_off_s = TIMER_DEFAULT_DELAY_OFF_S;
+    config->ch2_timer_out_mode = TIMER_OUT_LATCH;
+
+
     // Modbus defaults
     config->modbus_address = MODBUS_SLAVE_ID;
     config->modbus_baud = MODBUS_BAUD_RATE;
@@ -103,17 +110,26 @@ bool nvs_config_load(StoredConfig_t* config) {
     config->ch1_filter = prefs.getUShort(NVS_CH1_FILTER, 100);
 
     // Load Channel 1 timer mode settings
-    config->ch1_op_mode = (Ch1Mode)prefs.getUChar(NVS_CH1_OPMODE, CH1_MODE_COUNTER);
+    config->ch1_op_mode = (ChOpMode)prefs.getUChar(NVS_CH1_OPMODE, CH_MODE_COUNTER);
     config->ch1_timer_setpoint_s = prefs.getUInt(NVS_CH1_TSET, TIMER_DEFAULT_SETPOINT_S);
     config->ch1_timer_delay_off_s = prefs.getUInt(NVS_CH1_TDELAY, TIMER_DEFAULT_DELAY_OFF_S);
     config->ch1_timer_out_mode = (TimerOutMode)prefs.getUChar(NVS_CH1_TOUTMODE, TIMER_OUT_LATCH);
-    
+
     // Load Channel 2
     config->ch2_input_mode = (InputMode)prefs.getUChar(NVS_CH2_MODE, MODE_UP);
     config->ch2_edge_mode = (EdgeMode)prefs.getUChar(NVS_CH2_EDGE, EDGE_RISING);
     config->ch2_preset_value = prefs.getInt(NVS_CH2_PRESET, 10000);
     config->ch2_filter = prefs.getUShort(NVS_CH2_FILTER, 100);
-    
+
+    // Load Channel 2 timer mode settings. These keys are absent on installs
+    // that predate CH2 timer support, so the per-key defaults apply and CH2
+    // simply comes up as a counter.
+    config->ch2_op_mode = (ChOpMode)prefs.getUChar(NVS_CH2_OPMODE, CH_MODE_COUNTER);
+    config->ch2_timer_setpoint_s = prefs.getUInt(NVS_CH2_TSET, TIMER_DEFAULT_SETPOINT_S);
+    config->ch2_timer_delay_off_s = prefs.getUInt(NVS_CH2_TDELAY, TIMER_DEFAULT_DELAY_OFF_S);
+    config->ch2_timer_out_mode = (TimerOutMode)prefs.getUChar(NVS_CH2_TOUTMODE, TIMER_OUT_LATCH);
+
+
     // Load Modbus
     config->modbus_address = prefs.getUChar(NVS_MODBUS_ADDR, MODBUS_SLAVE_ID);
     config->modbus_baud = prefs.getUInt(NVS_MODBUS_BAUD, MODBUS_BAUD_RATE);
@@ -161,7 +177,14 @@ bool nvs_config_save(const StoredConfig_t* config) {
     prefs.putUChar(NVS_CH2_EDGE, (uint8_t)config->ch2_edge_mode);
     prefs.putInt(NVS_CH2_PRESET, config->ch2_preset_value);
     prefs.putUShort(NVS_CH2_FILTER, config->ch2_filter);
-    
+
+    // Save Channel 2 timer mode settings
+    prefs.putUChar(NVS_CH2_OPMODE, (uint8_t)config->ch2_op_mode);
+    prefs.putUInt(NVS_CH2_TSET, config->ch2_timer_setpoint_s);
+    prefs.putUInt(NVS_CH2_TDELAY, config->ch2_timer_delay_off_s);
+    prefs.putUChar(NVS_CH2_TOUTMODE, (uint8_t)config->ch2_timer_out_mode);
+
+
     // Save Modbus
     prefs.putUChar(NVS_MODBUS_ADDR, config->modbus_address);
     prefs.putUInt(NVS_MODBUS_BAUD, config->modbus_baud);
@@ -207,24 +230,30 @@ bool nvs_save_preset(uint8_t channel, int32_t preset) {
     return true;
 }
 
-bool nvs_save_ch1_op_mode(Ch1Mode mode) {
+bool nvs_save_op_mode(uint8_t channel, ChOpMode mode) {
+    if (channel > 1) return false;
     if (!nvs_initialized) nvs_config_init();
 
-    prefs.putUChar(NVS_CH1_OPMODE, (uint8_t)mode);
+    const char* key = (channel == 0) ? NVS_CH1_OPMODE : NVS_CH2_OPMODE;
+    prefs.putUChar(key, (uint8_t)mode);
 
-    Serial.printf("[NVS] Saved CH1 operating mode: %s\n",
-                  mode == CH1_MODE_TIMER ? "TIMER" : "COUNTER");
+    Serial.printf("[NVS] Saved CH%d operating mode: %s\n", channel + 1,
+                  mode == CH_MODE_TIMER ? "TIMER" : "COUNTER");
     return true;
 }
 
-bool nvs_save_ch1_timer(uint32_t setpoint_s, uint32_t delay_off_s, TimerOutMode out_mode) {
+bool nvs_save_timer(uint8_t channel, uint32_t setpoint_s, uint32_t delay_off_s,
+                    TimerOutMode out_mode) {
+    if (channel > 1) return false;
     if (!nvs_initialized) nvs_config_init();
 
-    prefs.putUInt(NVS_CH1_TSET, setpoint_s);
-    prefs.putUInt(NVS_CH1_TDELAY, delay_off_s);
-    prefs.putUChar(NVS_CH1_TOUTMODE, (uint8_t)out_mode);
+    const bool ch1 = (channel == 0);
+    prefs.putUInt(ch1 ? NVS_CH1_TSET : NVS_CH2_TSET, setpoint_s);
+    prefs.putUInt(ch1 ? NVS_CH1_TDELAY : NVS_CH2_TDELAY, delay_off_s);
+    prefs.putUChar(ch1 ? NVS_CH1_TOUTMODE : NVS_CH2_TOUTMODE, (uint8_t)out_mode);
 
-    Serial.printf("[NVS] Saved CH1 timer: setpoint=%lus, delay-off=%lus, out=%s\n",
+    Serial.printf("[NVS] Saved CH%d timer: setpoint=%lus, delay-off=%lus, out=%s\n",
+                  channel + 1,
                   (unsigned long)setpoint_s, (unsigned long)delay_off_s,
                   out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAY-OFF");
     return true;
@@ -337,12 +366,17 @@ void nvs_config_apply(const StoredConfig_t* config) {
     ch2_cfg.invert_inb = false;
     input_config_set_mode(1, &ch2_cfg);
 
-    // Apply Channel 1 timer settings before selecting the operating mode, so
-    // that switching into timer mode arms the countdown with the stored values.
-    ct_timer_set_setpoint(config->ch1_timer_setpoint_s);
-    ct_timer_set_delay_off(config->ch1_timer_delay_off_s);
-    ct_timer_set_out_mode(config->ch1_timer_out_mode);
-    ch1_set_mode(config->ch1_op_mode);
+    // Apply timer settings before selecting each operating mode, so that
+    // switching into timer mode arms the countdown with the stored values.
+    ct_timer_set_setpoint(0, config->ch1_timer_setpoint_s);
+    ct_timer_set_delay_off(0, config->ch1_timer_delay_off_s);
+    ct_timer_set_out_mode(0, config->ch1_timer_out_mode);
+    ch_set_mode(0, config->ch1_op_mode);
+
+    ct_timer_set_setpoint(1, config->ch2_timer_setpoint_s);
+    ct_timer_set_delay_off(1, config->ch2_timer_delay_off_s);
+    ct_timer_set_out_mode(1, config->ch2_timer_out_mode);
+    ch_set_mode(1, config->ch2_op_mode);
 
     Serial.println("[NVS] Configuration applied");
 }

@@ -64,7 +64,9 @@ typedef enum {
     KP_CH1_PRESET,
     KP_CH1_TSET,
     KP_CH1_TDELAY,
-    KP_CH2_PRESET
+    KP_CH2_PRESET,
+    KP_CH2_TSET,
+    KP_CH2_TDELAY
 } KeypadField_t;
 
 // Enumerated fields reachable from the option list
@@ -73,8 +75,10 @@ typedef enum {
     OPT_CH1_MODE,
     OPT_CH1_EDGE,
     OPT_CH1_TOUTMODE,
+    OPT_CH2_TYPE,
     OPT_CH2_MODE,
-    OPT_CH2_EDGE
+    OPT_CH2_EDGE,
+    OPT_CH2_TOUTMODE
 } OptionField_t;
 
 // =============================================================================
@@ -239,9 +243,9 @@ static void set_edge_mode(uint8_t channel, EdgeMode e) {
     nvs_save_edge_mode(channel, e);
 }
 
-static void save_timer_settings() {
-    Ch1TimerStatus_t t = ct_timer_get_status();
-    nvs_save_ch1_timer(t.setpoint_s, t.delay_off_s, t.out_mode);
+static void save_timer_settings(uint8_t channel) {
+    ChTimerStatus_t t = ct_timer_get_status(channel);
+    nvs_save_timer(channel, t.setpoint_s, t.delay_off_s, t.out_mode);
 }
 
 // =============================================================================
@@ -284,7 +288,7 @@ static const Rect_t HOME_TRST  = {215, HOME_BTN_Y, HOME_BTN_W, HOME_BTN_H};
 static void draw_home_buttons() {
     draw_button(HOME_MENU,  "MENU");
     draw_button(HOME_RESET, "RESET");
-    draw_button(HOME_TRST,  "CH1 RST");
+    draw_button(HOME_TRST,  "TMR RST");
 }
 
 static void draw_home() {
@@ -320,7 +324,11 @@ static void handle_home(uint16_t x, uint16_t y) {
     }
 
     if (rect_hit(HOME_TRST, x, y)) {
-        ct_timer_reset();
+        // Rearm whichever channels are running as countdown timers. A channel in
+        // counter mode has nothing to reset here - the RESET button covers it.
+        for (uint8_t ch = 0; ch < 2; ch++) {
+            if (ch_get_mode(ch) == CH_MODE_TIMER) ct_timer_reset(ch);
+        }
         return;
     }
 }
@@ -458,12 +466,20 @@ static void keypad_commit() {
             set_preset(2, (int32_t)value);
             break;
         case KP_CH1_TSET:
-            ct_timer_set_setpoint(value);
-            save_timer_settings();
+            ct_timer_set_setpoint(0, value);
+            save_timer_settings(0);
             break;
         case KP_CH1_TDELAY:
-            ct_timer_set_delay_off(value);
-            save_timer_settings();
+            ct_timer_set_delay_off(0, value);
+            save_timer_settings(0);
+            break;
+        case KP_CH2_TSET:
+            ct_timer_set_setpoint(1, value);
+            save_timer_settings(1);
+            break;
+        case KP_CH2_TDELAY:
+            ct_timer_set_delay_off(1, value);
+            save_timer_settings(1);
             break;
     }
 
@@ -512,8 +528,10 @@ typedef struct {
 static OptionSpec_t option_spec(OptionField_t f) {
     switch (f) {
         case OPT_CH1_TYPE:
-            return OptionSpec_t{"CH1 Type", {"COUNTER", "TIMER"}, 2};
+        case OPT_CH2_TYPE:
+            return OptionSpec_t{f == OPT_CH1_TYPE ? "CH1 Type" : "CH2 Type", {"COUNTER", "TIMER"}, 2};
         case OPT_CH1_TOUTMODE:
+        case OPT_CH2_TOUTMODE:
             return OptionSpec_t{"Timer Out Mode", {"LATCH", "DELAY OFF"}, 2};
         case OPT_CH1_MODE:
             return OptionSpec_t{"CH1 Count Mode", {"UP", "DN", "UDA", "UDC"}, 4};
@@ -532,9 +550,13 @@ static OptionSpec_t option_spec(OptionField_t f) {
 static uint8_t option_current(OptionField_t f) {
     switch (f) {
         case OPT_CH1_TYPE:
-            return ch1_get_mode() == CH1_MODE_TIMER ? 1 : 0;
+            return ch_get_mode(0) == CH_MODE_TIMER ? 1 : 0;
+        case OPT_CH2_TYPE:
+            return ch_get_mode(1) == CH_MODE_TIMER ? 1 : 0;
         case OPT_CH1_TOUTMODE:
-            return ct_timer_get_status().out_mode == TIMER_OUT_DELAY_OFF ? 1 : 0;
+            return ct_timer_get_status(0).out_mode == TIMER_OUT_DELAY_OFF ? 1 : 0;
+        case OPT_CH2_TOUTMODE:
+            return ct_timer_get_status(1).out_mode == TIMER_OUT_DELAY_OFF ? 1 : 0;
         case OPT_CH1_MODE:
             return (uint8_t)input_config_get(0).input_mode;
         case OPT_CH2_MODE:
@@ -548,16 +570,21 @@ static uint8_t option_current(OptionField_t f) {
 
 static void option_apply(OptionField_t f, uint8_t index) {
     switch (f) {
-        case OPT_CH1_TYPE: {
-            Ch1Mode m = (index == 1) ? CH1_MODE_TIMER : CH1_MODE_COUNTER;
-            ch1_set_mode(m);
-            nvs_save_ch1_op_mode(m);
+        case OPT_CH1_TYPE:
+        case OPT_CH2_TYPE: {
+            uint8_t ch = (f == OPT_CH1_TYPE) ? 0 : 1;
+            ChOpMode m = (index == 1) ? CH_MODE_TIMER : CH_MODE_COUNTER;
+            ch_set_mode(ch, m);
+            nvs_save_op_mode(ch, m);
             break;
         }
         case OPT_CH1_TOUTMODE:
-            ct_timer_set_out_mode(index == 1 ? TIMER_OUT_DELAY_OFF : TIMER_OUT_LATCH);
-            save_timer_settings();
+        case OPT_CH2_TOUTMODE: {
+            uint8_t ch = (f == OPT_CH1_TOUTMODE) ? 0 : 1;
+            ct_timer_set_out_mode(ch, index == 1 ? TIMER_OUT_DELAY_OFF : TIMER_OUT_LATCH);
+            save_timer_settings(ch);
             break;
+        }
         case OPT_CH1_MODE:
             set_input_mode(0, (InputMode)index);
             break;
@@ -612,23 +639,30 @@ static void handle_options(uint16_t x, uint16_t y) {
 }
 
 // =============================================================================
-// CHANNEL 1 CONFIG
+// CHANNEL CONFIG (CH1 / CH2)
 // =============================================================================
-// The rows shown depend on the operating mode, so both variants fit on one
-// screen without scrolling: counter mode shows mode/edge/preset, timer mode
+// Both channels have the same configuration screen; only the channel index
+// differs. The rows shown depend on the operating mode, so both variants fit on
+// one screen without scrolling: counter mode shows mode/edge/preset, timer mode
 // shows setpoint/delay-off/output mode.
 
-static void draw_ch1_cfg() {
-    bool timer_mode = (ch1_get_mode() == CH1_MODE_TIMER);
+// Channel index -> the screen and editor fields belonging to that channel.
+static Screen_t ch_cfg_screen(uint8_t ch) {
+    return ch == 0 ? SCREEN_CH1_CFG : SCREEN_CH2_CFG;
+}
+
+static void draw_ch_cfg(uint8_t ch) {
+    bool timer_mode = (ch_get_mode(ch) == CH_MODE_TIMER);
     char buf[16];
 
     tft.fillScreen(TFT_BLACK);
-    draw_title("CH1 CONFIG");
+    snprintf(buf, sizeof(buf), "CH%u CONFIG", (unsigned)(ch + 1));
+    draw_title(buf);
 
     draw_row(0, "Type", timer_mode ? "TIMER" : "COUNTER");
 
     if (timer_mode) {
-        Ch1TimerStatus_t t = ct_timer_get_status();
+        ChTimerStatus_t t = ct_timer_get_status(ch);
 
         snprintf(buf, sizeof(buf), "%lu s", (unsigned long)t.setpoint_s);
         draw_row(1, "Setpoint", buf);
@@ -639,84 +673,56 @@ static void draw_ch1_cfg() {
         draw_row(3, "Out Mode",
                  t.out_mode == TIMER_OUT_DELAY_OFF ? "DELAY OFF" : "LATCH");
     } else {
-        ChannelInputConfig_t cfg = input_config_get(0);
+        ChannelInputConfig_t cfg = input_config_get(ch);
 
         draw_row(1, "Count Mode", input_mode_to_string(cfg.input_mode));
         draw_row(2, "Edge", edge_to_string(cfg.edge_mode));
 
-        snprintf(buf, sizeof(buf), "%ld", (long)get_preset(1));
+        snprintf(buf, sizeof(buf), "%ld", (long)get_preset(ch + 1));
         draw_row(3, "Preset", buf);
     }
 
     draw_row(4, "Back", "");
 }
 
-static void handle_ch1_cfg(uint16_t x, uint16_t y) {
-    bool timer_mode = (ch1_get_mode() == CH1_MODE_TIMER);
+static void handle_ch_cfg(uint8_t ch, uint16_t x, uint16_t y) {
+    const bool timer_mode = (ch_get_mode(ch) == CH_MODE_TIMER);
+    const Screen_t back_to = ch_cfg_screen(ch);
 
     if (rect_hit(row_rect(0), x, y)) {
-        open_options(OPT_CH1_TYPE, SCREEN_CH1_CFG);
+        open_options(ch == 0 ? OPT_CH1_TYPE : OPT_CH2_TYPE, back_to);
         return;
     }
 
     if (timer_mode) {
-        Ch1TimerStatus_t t = ct_timer_get_status();
+        ChTimerStatus_t t = ct_timer_get_status(ch);
         if (rect_hit(row_rect(1), x, y)) {
-            open_keypad(KP_CH1_TSET, "Setpoint (s)", TIMER_SETPOINT_MAX_S,
-                        t.setpoint_s, SCREEN_CH1_CFG);
+            open_keypad(ch == 0 ? KP_CH1_TSET : KP_CH2_TSET, "Setpoint (s)",
+                        TIMER_SETPOINT_MAX_S, t.setpoint_s, back_to);
         } else if (rect_hit(row_rect(2), x, y)) {
-            open_keypad(KP_CH1_TDELAY, "Delay Off (s)", TIMER_SETPOINT_MAX_S,
-                        t.delay_off_s, SCREEN_CH1_CFG);
+            open_keypad(ch == 0 ? KP_CH1_TDELAY : KP_CH2_TDELAY, "Delay Off (s)",
+                        TIMER_SETPOINT_MAX_S, t.delay_off_s, back_to);
         } else if (rect_hit(row_rect(3), x, y)) {
-            open_options(OPT_CH1_TOUTMODE, SCREEN_CH1_CFG);
+            open_options(ch == 0 ? OPT_CH1_TOUTMODE : OPT_CH2_TOUTMODE, back_to);
         }
     } else {
         if (rect_hit(row_rect(1), x, y)) {
-            open_options(OPT_CH1_MODE, SCREEN_CH1_CFG);
+            open_options(ch == 0 ? OPT_CH1_MODE : OPT_CH2_MODE, back_to);
         } else if (rect_hit(row_rect(2), x, y)) {
-            open_options(OPT_CH1_EDGE, SCREEN_CH1_CFG);
+            open_options(ch == 0 ? OPT_CH1_EDGE : OPT_CH2_EDGE, back_to);
         } else if (rect_hit(row_rect(3), x, y)) {
-            int32_t p = get_preset(1);
-            open_keypad(KP_CH1_PRESET, "CH1 Preset", 999999999,
-                        p > 0 ? (uint32_t)p : 0, SCREEN_CH1_CFG);
+            int32_t p = get_preset(ch + 1);
+            // open_keypad() stores the title pointer, so it must outlive this
+            // call - s_kp_title is only read while the keypad is on screen.
+            static char preset_title[16];
+            snprintf(preset_title, sizeof(preset_title), "CH%u Preset",
+                     (unsigned)(ch + 1));
+            open_keypad(ch == 0 ? KP_CH1_PRESET : KP_CH2_PRESET, preset_title,
+                        999999999, p > 0 ? (uint32_t)p : 0, back_to);
         }
     }
 
     if (rect_hit(row_rect(4), x, y)) {
-        goto_screen(SCREEN_MENU);
-    }
-}
-
-// =============================================================================
-// CHANNEL 2 CONFIG
-// =============================================================================
-
-static void draw_ch2_cfg() {
-    ChannelInputConfig_t cfg = input_config_get(1);
-    char buf[16];
-
-    tft.fillScreen(TFT_BLACK);
-    draw_title("CH2 CONFIG");
-
-    draw_row(0, "Count Mode", input_mode_to_string(cfg.input_mode));
-    draw_row(1, "Edge", edge_to_string(cfg.edge_mode));
-
-    snprintf(buf, sizeof(buf), "%ld", (long)get_preset(2));
-    draw_row(2, "Preset", buf);
-
-    draw_row(3, "Back", "");
-}
-
-static void handle_ch2_cfg(uint16_t x, uint16_t y) {
-    if (rect_hit(row_rect(0), x, y)) {
-        open_options(OPT_CH2_MODE, SCREEN_CH2_CFG);
-    } else if (rect_hit(row_rect(1), x, y)) {
-        open_options(OPT_CH2_EDGE, SCREEN_CH2_CFG);
-    } else if (rect_hit(row_rect(2), x, y)) {
-        int32_t p = get_preset(2);
-        open_keypad(KP_CH2_PRESET, "CH2 Preset", 999999999,
-                    p > 0 ? (uint32_t)p : 0, SCREEN_CH2_CFG);
-    } else if (rect_hit(row_rect(3), x, y)) {
         goto_screen(SCREEN_MENU);
     }
 }
@@ -755,7 +761,8 @@ static void draw_actions() {
     draw_button(act_rect(2, 1), "OUT2 OFF");
     draw_button(act_rect(2, 2), "OUT2 AUTO");
 
-    draw_button(act_rect(3, 0), "TMR RST");
+    draw_button(act_rect(3, 0), "TMR1 RST");
+    draw_button(act_rect(3, 1), "TMR2 RST");
     draw_button(act_rect(3, 2), "BACK");
 }
 
@@ -807,8 +814,9 @@ static void handle_actions(uint16_t x, uint16_t y) {
     else if (rect_hit(act_rect(2, 1), x, y)) { set_relay(2,  0); toast("OUT2 forced OFF"); }
     else if (rect_hit(act_rect(2, 2), x, y)) { set_relay(2, -1); toast("OUT2 automatic"); }
 
-    // Row 3: CH1 countdown reset, back
-    else if (rect_hit(act_rect(3, 0), x, y)) { ct_timer_reset(); toast("Timer reset"); }
+    // Row 3: per-channel countdown reset, back
+    else if (rect_hit(act_rect(3, 0), x, y)) { ct_timer_reset(0); toast("Timer 1 reset"); }
+    else if (rect_hit(act_rect(3, 1), x, y)) { ct_timer_reset(1); toast("Timer 2 reset"); }
     else if (rect_hit(act_rect(3, 2), x, y)) { goto_screen(SCREEN_MENU); }
 }
 
@@ -833,22 +841,28 @@ static void save_all_to_flash() {
     StoredConfig_t cfg;
     ChannelInputConfig_t ch1 = input_config_get(0);
     ChannelInputConfig_t ch2 = input_config_get(1);
-    Ch1TimerStatus_t tmr = ct_timer_get_status();
+    ChTimerStatus_t tmr1 = ct_timer_get_status(0);
+    ChTimerStatus_t tmr2 = ct_timer_get_status(1);
 
     cfg.ch1_input_mode = ch1.input_mode;
     cfg.ch1_edge_mode = ch1.edge_mode;
     cfg.ch1_filter = ch1.filter_value;
     cfg.ch1_preset_value = get_preset(1);
 
-    cfg.ch1_op_mode = ch1_get_mode();
-    cfg.ch1_timer_setpoint_s = tmr.setpoint_s;
-    cfg.ch1_timer_delay_off_s = tmr.delay_off_s;
-    cfg.ch1_timer_out_mode = tmr.out_mode;
+    cfg.ch1_op_mode = ch_get_mode(0);
+    cfg.ch1_timer_setpoint_s = tmr1.setpoint_s;
+    cfg.ch1_timer_delay_off_s = tmr1.delay_off_s;
+    cfg.ch1_timer_out_mode = tmr1.out_mode;
 
     cfg.ch2_input_mode = ch2.input_mode;
     cfg.ch2_edge_mode = ch2.edge_mode;
     cfg.ch2_filter = ch2.filter_value;
     cfg.ch2_preset_value = get_preset(2);
+
+    cfg.ch2_op_mode = ch_get_mode(1);
+    cfg.ch2_timer_setpoint_s = tmr2.setpoint_s;
+    cfg.ch2_timer_delay_off_s = tmr2.delay_off_s;
+    cfg.ch2_timer_out_mode = tmr2.out_mode;
 
     cfg.modbus_address = MODBUS_SLAVE_ID;
     cfg.modbus_baud = MODBUS_BAUD_RATE;
@@ -911,7 +925,8 @@ static void do_factory_reset() {
         StoredConfig_t cfg;
         nvs_config_get_defaults(&cfg);
         nvs_config_apply(&cfg);
-        ct_timer_reset();
+        ct_timer_reset(0);
+        ct_timer_reset(1);
 
         CT_counter *c1 = getCounterInstance(1);
         CT_counter *c2 = getCounterInstance(2);
@@ -964,8 +979,8 @@ void ui_hmi_process() {
         switch (s_screen) {
             case SCREEN_HOME:             draw_home();             break;
             case SCREEN_MENU:             draw_menu();             break;
-            case SCREEN_CH1_CFG:          draw_ch1_cfg();          break;
-            case SCREEN_CH2_CFG:          draw_ch2_cfg();          break;
+            case SCREEN_CH1_CFG:          draw_ch_cfg(0);          break;
+            case SCREEN_CH2_CFG:          draw_ch_cfg(1);          break;
             case SCREEN_ACTIONS:          draw_actions();          break;
             case SCREEN_SYSTEM:           draw_system();           break;
             case SCREEN_KEYPAD:           draw_keypad();           break;
@@ -984,8 +999,8 @@ void ui_hmi_process() {
     switch (s_screen) {
         case SCREEN_HOME:             handle_home(x, y);             break;
         case SCREEN_MENU:             handle_menu(x, y);             break;
-        case SCREEN_CH1_CFG:          handle_ch1_cfg(x, y);          break;
-        case SCREEN_CH2_CFG:          handle_ch2_cfg(x, y);          break;
+        case SCREEN_CH1_CFG:          handle_ch_cfg(0, x, y);        break;
+        case SCREEN_CH2_CFG:          handle_ch_cfg(1, x, y);        break;
         case SCREEN_ACTIONS:          handle_actions(x, y);          break;
         case SCREEN_SYSTEM:           handle_system(x, y);           break;
         case SCREEN_KEYPAD:           handle_keypad(x, y);           break;

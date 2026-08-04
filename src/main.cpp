@@ -140,9 +140,7 @@ void setup() {
     
     ui_init();                // Setup display & draw layout
     ui_hmi_init();            // Load touch calibration (or run the wizard)
-    if (ch1_get_mode() != CH1_MODE_TIMER) {
-        pcnt_resume();        // PCNT stays paused in timer mode
-    }
+    pcnt_resume();            // Skips any channel running as a timer
     
     Serial.println("----------------------------------------");
     Serial.println("System ready! Commands: HELP, STATUS, RESET");
@@ -170,7 +168,7 @@ void loop() {
             ui_update_counter(
                 counter1->getCurrentValue(), counter1->getPresetValue(), s_ch1_frequency_hz,
                 counter2->getCurrentValue(), counter2->getPresetValue(), s_ch2_frequency_hz,
-                ch1_get_mode()
+                ch_get_mode(0), ch_get_mode(1)
             );
         }
     }

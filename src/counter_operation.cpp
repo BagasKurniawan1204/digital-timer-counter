@@ -265,12 +265,15 @@ void pcnt_reset() {
 }
 
 void pcnt_resume() {
-    // CH1's PCNT unit must stay paused while CH1 runs as a countdown timer -
-    // the timer reads GPIO34/35 directly and owns the CH1 output.
-    if (ch1_get_mode() != CH1_MODE_TIMER) {
+    // A channel's PCNT unit must stay paused while that channel runs as a
+    // countdown timer - the timer reads the two input pins directly and owns
+    // that channel's output.
+    if (ch_get_mode(0) != CH_MODE_TIMER) {
         pcnt_ch1_resume();
     }
-    pcnt_ch2_resume();
+    if (ch_get_mode(1) != CH_MODE_TIMER) {
+        pcnt_ch2_resume();
+    }
 }
 
 void pcnt_pause() {

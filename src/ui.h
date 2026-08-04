@@ -13,12 +13,12 @@ void ui_init();
 void ui_draw_home_static();
 
 // Update the display with current counter values and frequency.
-// When ch1_mode is CH1_MODE_TIMER the Channel 1 panel shows the countdown
-// (remaining / setpoint / state) instead of count / preset / frequency, and
-// the OUT1 indicator follows the timer output.
+// A channel whose mode is CH_MODE_TIMER shows the countdown (remaining /
+// setpoint / state) instead of count / preset / frequency, and its OUT
+// indicator follows the timer output. Each column is independent.
 void ui_update_counter(int32_t counter1_current, int32_t counter1_preset, int32_t counter1_frequency,
 					   int32_t counter2_current, int32_t counter2_preset, int32_t counter2_frequency,
-					   Ch1Mode ch1_mode);
+					   ChOpMode ch1_mode, ChOpMode ch2_mode);
 
 // Run the corner-tap calibration wizard. Leaves the screen blank and returns
 // the 5 calibration values in calData so the caller can persist them.

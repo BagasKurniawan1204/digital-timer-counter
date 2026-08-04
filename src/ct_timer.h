@@ -3,28 +3,34 @@
 
 /**
  * @file ct_timer.h
- * @brief Channel 1 countdown timer (Autonics CT4S style)
+ * @brief Per-channel countdown timer (Autonics CT4S style)
  *
- * Channel 1 can operate either as a pulse COUNTER (the original behaviour,
- * handled by CT_counter) or as a countdown TIMER. Only one of the two drives
- * OUTPUT_CH1_PIN at any moment - the arbitration lives in counterTask().
+ * Either channel can operate as a pulse COUNTER (the original behaviour, handled
+ * by CT_counter) or as a countdown TIMER. Only one of the two drives a channel's
+ * output pin at any moment - the arbitration lives in counterTask().
  *
- * In TIMER mode:
- * - COUNTER_CH1_PULSE_PIN acts as the gate. The countdown runs while the pin
- *   is asserted and pauses (retaining the remaining time) when released.
- * - COUNTER_CH1_CTRL_PIN acts as the reset. An asserting edge clears the
- *   output and rearms the timer from any state.
- * - OUTPUT_CH1_PIN is OFF while counting and turns ON at time-up.
+ * In TIMER mode, per channel:
+ * - The PULSE pin acts as the gate. The countdown runs while the pin is
+ *   asserted and pauses (retaining the remaining time) when released.
+ * - The CTRL pin acts as the reset. An asserting edge clears the output and
+ *   rearms the timer from any state.
+ * - The output pin is OFF while counting and turns ON at time-up.
  *
- * Both inputs are on GPIO34/35, which are input-only pins wired to external
- * pull-up resistors, so they idle HIGH and assert LOW (falling edge trigger).
- * See CH1_TIMER_ACTIVE_LOW in config.h.
+ *      channel   gate (PULSE)   reset (CTRL)   output
+ *      0 (CH1)   GPIO34         GPIO35         GPIO25
+ *      1 (CH2)   GPIO32         GPIO33         GPIO26
+ *
+ * All four inputs sit behind external pull-up resistors, so they idle HIGH and
+ * assert LOW (falling edge trigger). See TIMER_INPUT_ACTIVE_LOW in config.h.
  *
  * Two output modes control how the time-up output is cleared:
  * - TIMER_OUT_LATCH:     stays ON until the CTRL pin (or a web/serial reset)
  *                        clears it.
  * - TIMER_OUT_DELAY_OFF: clears automatically after delay_off_s seconds, then
  *                        re-runs immediately if the gate is still asserted.
+ *
+ * Channel indices are 0-based here, matching input_config_get() and
+ * systemData.channel[]. Note getCounterInstance() is 1-based.
  */
 
 #include <Arduino.h>
@@ -33,10 +39,10 @@
 // ENUMERATIONS
 // =============================================================================
 
-// Operating mode of Channel 1
-enum Ch1Mode {
-    CH1_MODE_COUNTER,   // Pulse counter (default, uses PCNT + CT_counter)
-    CH1_MODE_TIMER      // Countdown timer (uses ct_timer_process)
+// Operating mode of a channel
+enum ChOpMode {
+    CH_MODE_COUNTER,    // Pulse counter (default, uses PCNT + CT_counter)
+    CH_MODE_TIMER       // Countdown timer (uses ct_timer_process)
 };
 
 // How the time-up output is released
@@ -62,52 +68,53 @@ typedef struct {
     uint32_t     setpoint_s;    // Configured countdown time
     uint32_t     delay_off_s;   // Configured delay-off time
     TimerOutMode out_mode;      // Latch or delay-off
-    bool         output_state;  // Current OUTPUT_CH1_PIN state
-} Ch1TimerStatus_t;
+    bool         output_state;  // Current output pin state
+} ChTimerStatus_t;
 
 // =============================================================================
 // TIMER FUNCTIONS
 // =============================================================================
+// Every function takes a 0-based channel index and ignores out-of-range values.
 
 /**
- * @brief Configure the CH1 timer inputs and reset to IDLE
+ * @brief Configure a channel's timer inputs and reset it to IDLE
  * Safe to call more than once.
  */
-void ct_timer_init();
+void ct_timer_init(uint8_t channel);
 
 /**
- * @brief Advance the countdown state machine
- * Called every counterTask tick (1 ms) while CH1 is in timer mode.
- * This is the only writer of OUTPUT_CH1_PIN in timer mode.
+ * @brief Advance a channel's countdown state machine
+ * Called every counterTask tick (1 ms) while that channel is in timer mode.
+ * This is the only writer of the channel's output pin in timer mode.
  */
-void ct_timer_process();
+void ct_timer_process(uint8_t channel);
 
 /**
- * @brief Force the timer back to IDLE with the output OFF
+ * @brief Force a channel's timer back to IDLE with the output OFF
  */
-void ct_timer_reset();
+void ct_timer_reset(uint8_t channel);
 
 /**
- * @brief Set the countdown time
+ * @brief Set a channel's countdown time
  * @param seconds Countdown time, clamped to 0..TIMER_SETPOINT_MAX_S
  */
-void ct_timer_set_setpoint(uint32_t seconds);
+void ct_timer_set_setpoint(uint8_t channel, uint32_t seconds);
 
 /**
- * @brief Set the delay-off release time (TIMER_OUT_DELAY_OFF mode only)
+ * @brief Set a channel's delay-off release time (TIMER_OUT_DELAY_OFF mode only)
  * @param seconds Delay-off time, clamped to 0..TIMER_SETPOINT_MAX_S
  */
-void ct_timer_set_delay_off(uint32_t seconds);
+void ct_timer_set_delay_off(uint8_t channel, uint32_t seconds);
 
 /**
- * @brief Select how the time-up output is released
+ * @brief Select how a channel's time-up output is released
  */
-void ct_timer_set_out_mode(TimerOutMode mode);
+void ct_timer_set_out_mode(uint8_t channel, TimerOutMode mode);
 
 /**
- * @brief Get a consistent snapshot of the timer state
+ * @brief Get a consistent snapshot of a channel's timer state
  */
-Ch1TimerStatus_t ct_timer_get_status();
+ChTimerStatus_t ct_timer_get_status(uint8_t channel);
 
 /**
  * @brief Get string name for a timer state (for debug/display)
@@ -115,22 +122,22 @@ Ch1TimerStatus_t ct_timer_get_status();
 const char* ct_timer_state_to_string(TimerState state);
 
 // =============================================================================
-// CHANNEL 1 MODE SWITCHING
+// CHANNEL MODE SWITCHING
 // =============================================================================
 
 /**
- * @brief Switch Channel 1 between counter and timer operation
+ * @brief Switch a channel between counter and timer operation
  *
- * COUNTER -> TIMER: pauses PCNT unit 0, reconfigures GPIO34/35 as plain
- *                   inputs and arms the timer with the output OFF.
+ * COUNTER -> TIMER: pauses the channel's PCNT unit, reconfigures its two input
+ *                   pins as plain GPIOs and arms the timer with the output OFF.
  * TIMER -> COUNTER: resets the timer, releases the output and rebuilds the
  *                   PCNT unit from the stored channel input config.
  */
-void ch1_set_mode(Ch1Mode mode);
+void ch_set_mode(uint8_t channel, ChOpMode mode);
 
 /**
- * @brief Get the current Channel 1 operating mode
+ * @brief Get a channel's current operating mode
  */
-Ch1Mode ch1_get_mode();
+ChOpMode ch_get_mode(uint8_t channel);
 
 #endif // CT_TIMER_H

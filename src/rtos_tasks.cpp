@@ -205,18 +205,19 @@ void counterTask(void *pvParameters) {
             lastFreqCalc = xTaskGetTickCount();
         }
         
-        // Process CT_counter instances (handles preset comparison & output)
-        // CH1 is either a counter or a countdown timer - exactly one of them
-        // may drive OUTPUT_CH1_PIN, so the two are mutually exclusive here.
-        CT_counter* ctr1 = getCounterInstance(1);
-        CT_counter* ctr2 = getCounterInstance(2);
-        if (ch1_get_mode() == CH1_MODE_TIMER) {
-            ct_timer_process();
-        } else if (ctr1) {
-            ctr1->process();
+        // Process each channel (handles preset comparison & output).
+        // A channel is either a counter or a countdown timer - exactly one of
+        // them may drive that channel's output pin, so the two are mutually
+        // exclusive here.
+        for (uint8_t ch = 0; ch < 2; ch++) {
+            if (ch_get_mode(ch) == CH_MODE_TIMER) {
+                ct_timer_process(ch);
+            } else {
+                CT_counter* ctr = getCounterInstance(ch + 1);  // 1-based
+                if (ctr) ctr->process();
+            }
         }
-        if (ctr2) ctr2->process();   // CH2 is always a counter
-        
+
         // Run at 1ms interval
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(TASK_INTERVAL_COUNTER));
     }
