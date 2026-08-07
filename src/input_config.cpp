@@ -29,6 +29,32 @@ static const pcnt_unit_t s_pcnt_units[2] = {COUNTER_CH1_PCNT_UNIT, COUNTER_CH2_P
 // =============================================================================
 
 /**
+ * @brief Release PCNT_CHANNEL_1 of a unit so it stops counting INB
+ *
+ * MODE_UDA and MODE_UDC configure *both* channels of the unit, with INB (the
+ * CTRL pin) wired to channel 1's pulse input. The single-input modes only
+ * configure channel 0, so without this the previous mode's channel 1 survives
+ * the switch and keeps counting CTRL-pin edges - a plain UP counter would then
+ * also count pulses on INB until the next reboot.
+ */
+static esp_err_t release_channel_1(uint8_t channel) {
+    pcnt_config_t idle = {
+        .pulse_gpio_num = PCNT_PIN_NOT_USED,
+        .ctrl_gpio_num  = PCNT_PIN_NOT_USED,
+        .lctrl_mode     = PCNT_MODE_KEEP,
+        .hctrl_mode     = PCNT_MODE_KEEP,
+        .pos_mode       = PCNT_COUNT_DIS,       // Count nothing on either edge
+        .neg_mode       = PCNT_COUNT_DIS,
+        .counter_h_lim  = PCNT_HIGH_LIMIT,
+        .counter_l_lim  = PCNT_LOW_LIMIT,
+        .unit           = s_pcnt_units[channel],
+        .channel        = PCNT_CHANNEL_1,
+    };
+
+    return pcnt_unit_config(&idle);
+}
+
+/**
  * @brief Configure PCNT for MODE_UP (count up only)
  */
 static esp_err_t configure_mode_up(uint8_t channel, const ChannelInputConfig_t* config) {
@@ -52,8 +78,12 @@ static esp_err_t configure_mode_up(uint8_t channel, const ChannelInputConfig_t* 
         pcnt_config.pos_mode = PCNT_COUNT_DIS;
         pcnt_config.neg_mode = PCNT_COUNT_INC;
     }
-    
-    return pcnt_unit_config(&pcnt_config);
+
+    esp_err_t ret = pcnt_unit_config(&pcnt_config);
+    if (ret != ESP_OK) return ret;
+
+    // This mode uses INA only - make sure INB is not still counting
+    return release_channel_1(channel);
 }
 
 /**
@@ -80,8 +110,12 @@ static esp_err_t configure_mode_dn(uint8_t channel, const ChannelInputConfig_t* 
         pcnt_config.pos_mode = PCNT_COUNT_DIS;
         pcnt_config.neg_mode = PCNT_COUNT_DEC;
     }
-    
-    return pcnt_unit_config(&pcnt_config);
+
+    esp_err_t ret = pcnt_unit_config(&pcnt_config);
+    if (ret != ESP_OK) return ret;
+
+    // This mode uses INA only - make sure INB is not still counting
+    return release_channel_1(channel);
 }
 
 /**

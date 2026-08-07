@@ -12,6 +12,7 @@
 
 #include <Arduino.h>
 #include "CT_counter.h"
+#include "ct_timer.h"
 #include "input_config.h"
 
 // =============================================================================
@@ -25,17 +26,35 @@
 #define NVS_CH1_PRESET      "ch1_preset"
 #define NVS_CH1_FILTER      "ch1_filter"
 
+// Channel 1 timer mode keys
+#define NVS_CH1_OPMODE      "ch1_opmode"    // 0 = counter, 1 = timer
+#define NVS_CH1_TSET        "ch1_tset"      // Countdown setpoint (seconds)
+#define NVS_CH1_TDELAY      "ch1_tdelay"    // Delay-off duration (seconds)
+#define NVS_CH1_TOUTMODE    "ch1_toutmode"  // 0 = latch, 1 = delay-off
+
 // Channel 2 keys
 #define NVS_CH2_MODE        "ch2_mode"
 #define NVS_CH2_EDGE        "ch2_edge"
 #define NVS_CH2_PRESET      "ch2_preset"
 #define NVS_CH2_FILTER      "ch2_filter"
 
+// Channel 2 timer mode keys
+#define NVS_CH2_OPMODE      "ch2_opmode"    // 0 = counter, 1 = timer
+#define NVS_CH2_TSET        "ch2_tset"      // Countdown setpoint (seconds)
+#define NVS_CH2_TDELAY      "ch2_tdelay"    // Delay-off duration (seconds)
+#define NVS_CH2_TOUTMODE    "ch2_toutmode"  // 0 = latch, 1 = delay-off
+
 // System keys
 #define NVS_WIFI_SSID       "wifi_ssid"
 #define NVS_WIFI_PASS       "wifi_pass"
 #define NVS_MODBUS_ADDR     "mb_addr"
 #define NVS_MODBUS_BAUD     "mb_baud"
+
+// Touchscreen calibration (5 x uint16_t blob from TFT_eSPI calibrateTouch()).
+// Deliberately kept out of StoredConfig_t so a factory reset cannot leave the
+// panel uncalibrated and therefore unusable from the HMI.
+#define NVS_TOUCH_CAL       "touch_cal"
+#define TOUCH_CAL_WORDS     5
 
 // =============================================================================
 // STORED CONFIGURATION STRUCTURE
@@ -46,13 +65,26 @@ typedef struct {
     EdgeMode ch1_edge_mode;
     int32_t ch1_preset_value;
     uint16_t ch1_filter;
-    
+
+    // Channel 1 timer mode config
+    ChOpMode ch1_op_mode;               // Counter or timer operation
+    uint32_t ch1_timer_setpoint_s;      // Countdown time in seconds
+    uint32_t ch1_timer_delay_off_s;     // Delay-off release time in seconds
+    TimerOutMode ch1_timer_out_mode;    // Latch or delay-off
+
     // Channel 2 config
     InputMode ch2_input_mode;
     EdgeMode ch2_edge_mode;
     int32_t ch2_preset_value;
     uint16_t ch2_filter;
-    
+
+    // Channel 2 timer mode config
+    ChOpMode ch2_op_mode;               // Counter or timer operation
+    uint32_t ch2_timer_setpoint_s;      // Countdown time in seconds
+    uint32_t ch2_timer_delay_off_s;     // Delay-off release time in seconds
+    TimerOutMode ch2_timer_out_mode;    // Latch or delay-off
+
+
     // Modbus config
     uint8_t modbus_address;
     uint32_t modbus_baud;
@@ -62,7 +94,7 @@ typedef struct {
 } StoredConfig_t;
 
 // Current config version (increment when structure changes)
-#define CONFIG_VERSION 1
+#define CONFIG_VERSION 2
 
 // =============================================================================
 // FUNCTION DECLARATIONS
@@ -113,12 +145,41 @@ bool nvs_save_edge_mode(uint8_t channel, EdgeMode edge);
 bool nvs_save_preset(uint8_t channel, int32_t preset);
 
 /**
+ * @brief Save a channel's operating mode (counter or timer)
+ * @param channel Channel number (0 or 1)
+ * @return true on success
+ */
+bool nvs_save_op_mode(uint8_t channel, ChOpMode mode);
+
+/**
+ * @brief Save a channel's countdown timer settings
+ * @param channel Channel number (0 or 1)
+ * @return true on success
+ */
+bool nvs_save_timer(uint8_t channel, uint32_t setpoint_s, uint32_t delay_off_s,
+                    TimerOutMode out_mode);
+
+/**
  * @brief Load channel input mode from NVS
  * @param channel Channel number (0 or 1)
  * @param mode Pointer to receive mode
  * @return true if found, false if using default
  */
 bool nvs_load_input_mode(uint8_t channel, InputMode* mode);
+
+/**
+ * @brief Save the touchscreen calibration data
+ * @param cal TOUCH_CAL_WORDS values produced by TFT_eSPI calibrateTouch()
+ * @return true on success
+ */
+bool nvs_save_touch_cal(const uint16_t cal[TOUCH_CAL_WORDS]);
+
+/**
+ * @brief Load the touchscreen calibration data
+ * @param cal Buffer to receive TOUCH_CAL_WORDS values
+ * @return true if a valid calibration was stored, false if never calibrated
+ */
+bool nvs_load_touch_cal(uint16_t cal[TOUCH_CAL_WORDS]);
 
 /**
  * @brief Reset all NVS configuration to defaults

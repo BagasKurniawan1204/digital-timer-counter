@@ -9,6 +9,7 @@
 #include "counter_operation.h"
 #include "timer_operation.h"
 #include "CT_counter.h"
+#include "ct_timer.h"
 #include "input_config.h"
 #include "nvs_config.h"
 #include "rtos_tasks.h"
@@ -64,28 +65,57 @@ static String make_state_json() {
     // Get input configs
     ChannelInputConfig_t cfg1 = input_config_get(0);
     ChannelInputConfig_t cfg2 = input_config_get(1);
-    
-    char buf[512];
+
+    // Per-channel timer mode state
+    bool ch1_is_timer = (ch_get_mode(0) == CH_MODE_TIMER);
+    bool ch2_is_timer = (ch_get_mode(1) == CH_MODE_TIMER);
+    ChTimerStatus_t tmr1 = ct_timer_get_status(0);
+    ChTimerStatus_t tmr2 = ct_timer_get_status(1);
+
+    char buf[1024];
     snprintf(buf, sizeof(buf),
              "{"
              "\"ch1_count\":%ld,\"ch1_freq\":%ld,\"ch1_mode\":\"%s\",\"ch1_out\":%d,\"ch1_preset\":%ld,"
+             "\"ch1_mode_type\":\"%s\","
+             "\"t_state\":\"%s\",\"t_remaining\":%lu,\"t_setpoint\":%lu,\"t_delay\":%lu,"
+             "\"t_outmode\":\"%s\",\"t_out\":%d,"
              "\"ch2_count\":%ld,\"ch2_freq\":%ld,\"ch2_mode\":\"%s\",\"ch2_out\":%d,\"ch2_preset\":%ld,"
+             "\"ch2_mode_type\":\"%s\","
+             "\"t2_state\":\"%s\",\"t2_remaining\":%lu,\"t2_setpoint\":%lu,\"t2_delay\":%lu,"
+             "\"t2_outmode\":\"%s\",\"t2_out\":%d,"
              "\"timer\":%lu,\"uptime\":%lu,\"heap\":%lu"
              "}",
              (long)pcnt_ch1_get_count(),
              (long)s_ch1_frequency_hz,
              input_mode_to_string(cfg1.input_mode),
-             ctr1 ? (ctr1->getOutputState() ? 1 : 0) : 0,
+             // In timer mode the countdown owns the channel's output pin
+             ch1_is_timer ? (tmr1.output_state ? 1 : 0)
+                          : (ctr1 ? (ctr1->getOutputState() ? 1 : 0) : 0),
              ctr1 ? (long)ctr1->getPresetValue() : 10000L,
+             ch1_is_timer ? "TIMER" : "COUNTER",
+             ct_timer_state_to_string(tmr1.state),
+             (unsigned long)tmr1.remaining_s,
+             (unsigned long)tmr1.setpoint_s,
+             (unsigned long)tmr1.delay_off_s,
+             tmr1.out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAYOFF",
+             tmr1.output_state ? 1 : 0,
              (long)pcnt_ch2_get_count(),
              (long)s_ch2_frequency_hz,
              input_mode_to_string(cfg2.input_mode),
-             ctr2 ? (ctr2->getOutputState() ? 1 : 0) : 0,
+             ch2_is_timer ? (tmr2.output_state ? 1 : 0)
+                          : (ctr2 ? (ctr2->getOutputState() ? 1 : 0) : 0),
              ctr2 ? (long)ctr2->getPresetValue() : 10000L,
+             ch2_is_timer ? "TIMER" : "COUNTER",
+             ct_timer_state_to_string(tmr2.state),
+             (unsigned long)tmr2.remaining_s,
+             (unsigned long)tmr2.setpoint_s,
+             (unsigned long)tmr2.delay_off_s,
+             tmr2.out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAYOFF",
+             tmr2.output_state ? 1 : 0,
              (unsigned long)elapsed_ms,
              (unsigned long)uptime_sec,
              (unsigned long)ESP.getFreeHeap());
-    
+
     return String(buf);
 }
 
@@ -289,13 +319,122 @@ void web_server_init() {
     //     ws.textAll(make_state_json());
     // });
     
-    // server.on("/timer/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
-    //     stopwatch_reset();
-    //     elapsed_ms = 0;
-    //     request->send(200, "application/json", "{\"status\":\"reset\"}");
-    //     ws.textAll(make_state_json());
-    // });
-    
+    server.on("/timer/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
+        stopwatch_reset();
+        elapsed_ms = 0;
+        request->send(200, "application/json", "{\"status\":\"reset\"}");
+        ws.textAll(make_state_json());
+    });
+
+    // =========================================================================
+    // PER-CHANNEL TIMER MODE API ENDPOINTS (CT4S-style countdown)
+    // =========================================================================
+    // Each handler takes a 0-based channel and is registered twice, so the
+    // original /ch1/... URLs keep working unchanged and /ch2/... behaves
+    // identically for Channel 2.
+
+    // Switch a channel between counter and timer operation
+    auto handle_ch_mode = [](AsyncWebServerRequest *request, uint8_t ch) {
+        if (!request->hasParam("type")) {
+            request->send(400, "application/json",
+                          "{\"status\":\"error\",\"msg\":\"missing type\"}");
+            return;
+        }
+
+        String type = request->getParam("type")->value();
+        type.toLowerCase();
+
+        if (type == "timer") {
+            ch_set_mode(ch, CH_MODE_TIMER);
+        } else if (type == "counter") {
+            ch_set_mode(ch, CH_MODE_COUNTER);
+        } else {
+            request->send(400, "application/json",
+                          "{\"status\":\"error\",\"msg\":\"type must be counter or timer\"}");
+            return;
+        }
+
+        // Persist immediately so the mode survives a power cycle
+        nvs_save_op_mode(ch, ch_get_mode(ch));
+
+        request->send(200, "application/json",
+                      ch_get_mode(ch) == CH_MODE_TIMER ? "{\"status\":\"timer\"}"
+                                                       : "{\"status\":\"counter\"}");
+        ws.textAll(make_state_json());
+    };
+
+    // Update countdown setpoint / delay-off / output mode (any subset)
+    auto handle_ch_timer_set = [](AsyncWebServerRequest *request, uint8_t ch) {
+        bool changed = false;
+
+        if (request->hasParam("sec")) {
+            long sec = request->getParam("sec")->value().toInt();
+            if (sec < 0) sec = 0;
+            ct_timer_set_setpoint(ch, (uint32_t)sec);
+            changed = true;
+        }
+
+        if (request->hasParam("delay")) {
+            long delay_s = request->getParam("delay")->value().toInt();
+            if (delay_s < 0) delay_s = 0;
+            ct_timer_set_delay_off(ch, (uint32_t)delay_s);
+            changed = true;
+        }
+
+        if (request->hasParam("outmode")) {
+            String om = request->getParam("outmode")->value();
+            om.toLowerCase();
+            if (om == "latch") {
+                ct_timer_set_out_mode(ch, TIMER_OUT_LATCH);
+                changed = true;
+            } else if (om == "delayoff") {
+                ct_timer_set_out_mode(ch, TIMER_OUT_DELAY_OFF);
+                changed = true;
+            }
+        }
+
+        if (!changed) {
+            request->send(400, "application/json",
+                          "{\"status\":\"error\",\"msg\":\"no valid parameter\"}");
+            return;
+        }
+
+        // Persist immediately so the settings survive a power cycle
+        ChTimerStatus_t tmr = ct_timer_get_status(ch);
+        nvs_save_timer(ch, tmr.setpoint_s, tmr.delay_off_s, tmr.out_mode);
+
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+        ws.textAll(make_state_json());
+    };
+
+    // Clear the timer output and rearm the countdown (latch release)
+    auto handle_ch_timer_reset = [](AsyncWebServerRequest *request, uint8_t ch) {
+        ct_timer_reset(ch);
+        request->send(200, "application/json", "{\"status\":\"reset\"}");
+        ws.textAll(make_state_json());
+    };
+
+    server.on("/ch1/mode", HTTP_GET, [handle_ch_mode](AsyncWebServerRequest *request) {
+        handle_ch_mode(request, 0);
+    });
+    server.on("/ch1/timer/set", HTTP_GET, [handle_ch_timer_set](AsyncWebServerRequest *request) {
+        handle_ch_timer_set(request, 0);
+    });
+    server.on("/ch1/timer/reset", HTTP_GET, [handle_ch_timer_reset](AsyncWebServerRequest *request) {
+        handle_ch_timer_reset(request, 0);
+    });
+
+    server.on("/ch2/mode", HTTP_GET, [handle_ch_mode](AsyncWebServerRequest *request) {
+        handle_ch_mode(request, 1);
+    });
+    server.on("/ch2/timer/set", HTTP_GET, [handle_ch_timer_set](AsyncWebServerRequest *request) {
+        handle_ch_timer_set(request, 1);
+    });
+    server.on("/ch2/timer/reset", HTTP_GET, [handle_ch_timer_reset](AsyncWebServerRequest *request) {
+        handle_ch_timer_reset(request, 1);
+    });
+
+
     // =========================================================================
     // DEBUG ENDPOINTS
     // =========================================================================
@@ -320,20 +459,34 @@ void web_server_init() {
         CT_counter* ctr2 = getCounterInstance(2);
         
         const char* edge_str[] = {"RISING", "FALLING", "BOTH"};
-        
-        char buf[512];
+        ChTimerStatus_t tmr1 = ct_timer_get_status(0);
+        ChTimerStatus_t tmr2 = ct_timer_get_status(1);
+
+        char buf[896];
         snprintf(buf, sizeof(buf),
             "{"
             "\"ch1_mode\":\"%s\",\"ch1_preset\":%ld,\"ch1_edge\":\"%s\","
-            "\"ch2_mode\":\"%s\",\"ch2_preset\":%ld,\"ch2_edge\":\"%s\""
+            "\"ch1_mode_type\":\"%s\","
+            "\"t_setpoint\":%lu,\"t_delay\":%lu,\"t_outmode\":\"%s\","
+            "\"ch2_mode\":\"%s\",\"ch2_preset\":%ld,\"ch2_edge\":\"%s\","
+            "\"ch2_mode_type\":\"%s\","
+            "\"t2_setpoint\":%lu,\"t2_delay\":%lu,\"t2_outmode\":\"%s\""
             "}",
             input_mode_to_string(cfg1.input_mode),
             ctr1 ? (long)ctr1->getPresetValue() : 10000L,
             edge_str[cfg1.edge_mode],
+            ch_get_mode(0) == CH_MODE_TIMER ? "TIMER" : "COUNTER",
+            (unsigned long)tmr1.setpoint_s,
+            (unsigned long)tmr1.delay_off_s,
+            tmr1.out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAYOFF",
             input_mode_to_string(cfg2.input_mode),
             ctr2 ? (long)ctr2->getPresetValue() : 10000L,
-            edge_str[cfg2.edge_mode]);
-        
+            edge_str[cfg2.edge_mode],
+            ch_get_mode(1) == CH_MODE_TIMER ? "TIMER" : "COUNTER",
+            (unsigned long)tmr2.setpoint_s,
+            (unsigned long)tmr2.delay_off_s,
+            tmr2.out_mode == TIMER_OUT_LATCH ? "LATCH" : "DELAYOFF");
+
         request->send(200, "application/json", buf);
     });
     
@@ -431,11 +584,25 @@ void web_server_init() {
         cfg.ch1_edge_mode = ch1.edge_mode;
         cfg.ch1_filter = ch1.filter_value;
         cfg.ch1_preset_value = ctr1 ? ctr1->getPresetValue() : 10000;
-        
+
+        // Persist CH1 timer mode settings
+        ChTimerStatus_t tmr1 = ct_timer_get_status(0);
+        cfg.ch1_op_mode = ch_get_mode(0);
+        cfg.ch1_timer_setpoint_s = tmr1.setpoint_s;
+        cfg.ch1_timer_delay_off_s = tmr1.delay_off_s;
+        cfg.ch1_timer_out_mode = tmr1.out_mode;
+
         cfg.ch2_input_mode = ch2.input_mode;
         cfg.ch2_edge_mode = ch2.edge_mode;
         cfg.ch2_filter = ch2.filter_value;
         cfg.ch2_preset_value = ctr2 ? ctr2->getPresetValue() : 10000;
+
+        // Persist CH2 timer mode settings
+        ChTimerStatus_t tmr2 = ct_timer_get_status(1);
+        cfg.ch2_op_mode = ch_get_mode(1);
+        cfg.ch2_timer_setpoint_s = tmr2.setpoint_s;
+        cfg.ch2_timer_delay_off_s = tmr2.delay_off_s;
+        cfg.ch2_timer_out_mode = tmr2.out_mode;
         
         cfg.modbus_address = MODBUS_SLAVE_ID;
         cfg.modbus_baud = MODBUS_BAUD_RATE;
@@ -453,7 +620,13 @@ void web_server_init() {
             StoredConfig_t cfg;
             nvs_config_get_defaults(&cfg);
             nvs_config_apply(&cfg);
-            
+
+            // Restore both channels' timer defaults (nvs_config_apply already
+            // applied the stored values, this keeps the visible state
+            // consistent)
+            ct_timer_reset(0);
+            ct_timer_reset(1);
+
             // Reset counter instances
             CT_counter* ctr1 = getCounterInstance(1);
             CT_counter* ctr2 = getCounterInstance(2);

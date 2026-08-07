@@ -11,7 +11,7 @@
 #include "modbus_rtu.h"
 #include "web_server.h"
 #include "CT_counter.h"
-#include "spreadsheet_log.h"
+#include "ct_timer.h"
 
 // =============================================================================
 // GLOBAL DEFINITIONS
@@ -211,12 +211,19 @@ void counterTask(void *pvParameters) {
             lastFreqCalc = xTaskGetTickCount();
         }
         
-        // Process CT_counter instances (handles preset comparison & output)
-        CT_counter* ctr1 = getCounterInstance(1);
-        CT_counter* ctr2 = getCounterInstance(2);
-        if (ctr1) ctr1->process();
-        if (ctr2) ctr2->process();
-        
+        // Process each channel (handles preset comparison & output).
+        // A channel is either a counter or a countdown timer - exactly one of
+        // them may drive that channel's output pin, so the two are mutually
+        // exclusive here.
+        for (uint8_t ch = 0; ch < 2; ch++) {
+            if (ch_get_mode(ch) == CH_MODE_TIMER) {
+                ct_timer_process(ch);
+            } else {
+                CT_counter* ctr = getCounterInstance(ch + 1);  // 1-based
+                if (ctr) ctr->process();
+            }
+        }
+
         // Run at 1ms interval
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(TASK_INTERVAL_COUNTER));
     }

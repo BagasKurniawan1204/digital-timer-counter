@@ -5,6 +5,7 @@
 
 #include "counter_operation.h"
 #include "rtos_tasks.h"
+#include "ct_timer.h"
 
 // =============================================================================
 // ISR HANDLERS
@@ -264,8 +265,15 @@ void pcnt_reset() {
 }
 
 void pcnt_resume() {
-    pcnt_ch1_resume();
-    pcnt_ch2_resume();
+    // A channel's PCNT unit must stay paused while that channel runs as a
+    // countdown timer - the timer reads the two input pins directly and owns
+    // that channel's output.
+    if (ch_get_mode(0) != CH_MODE_TIMER) {
+        pcnt_ch1_resume();
+    }
+    if (ch_get_mode(1) != CH_MODE_TIMER) {
+        pcnt_ch2_resume();
+    }
 }
 
 void pcnt_pause() {
