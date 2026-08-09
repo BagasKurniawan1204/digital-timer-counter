@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "pens_logo.h"
 
 // TFT instance
 TFT_eSPI tft = TFT_eSPI();
@@ -10,6 +11,27 @@ TFT_eSPI tft = TFT_eSPI();
 // Cleared by ui_draw_home_static() so both columns' labels are repainted the
 // next time ui_update_counter() runs after returning from an HMI screen.
 static bool ui_labels_drawn = false;
+
+// =============================================================================
+// PENS LOGO — RGB565 bitmap + text wordmark
+// =============================================================================
+// The emblem is drawn from the real logo.png via pens_logo.h (40×29 px, 2320
+// bytes flash). The "pens" wordmark is drawn as text so it stays crisp at this
+// size.
+static void draw_pens_logo() {
+    const uint16_t navy = tft.color565(0, 26, 58);
+    const uint16_t gold = tft.color565(240, 192, 0);
+
+    // Draw the emblem bitmap at top-left (8, 8)
+    tft.pushImage(8, 8, PENS_LOGO_W, PENS_LOGO_H, PENS_LOGO);
+
+    // "pens" wordmark to the right of the emblem
+    tft.setTextSize(1);
+    tft.setCursor(52, 16);
+    tft.setTextColor(navy, TFT_BLACK); tft.print("p");
+    tft.setTextColor(gold, TFT_BLACK); tft.print("e");
+    tft.setTextColor(navy, TFT_BLACK); tft.print("ns");
+}
 
 // Width of a value column. Clearing only the column - rather than everything
 // from x to the right edge - keeps the Counter 2 labels at x=180 alive.
@@ -85,10 +107,14 @@ static void draw_output_indicator(int16_t x, int16_t y, bool active, const char 
 void ui_draw_home_static() {
     tft.fillScreen(TFT_BLACK);
 
-    // Header
+    // PENS logo, top-left
+    draw_pens_logo();
+
+    // Header. Shifted right and centred over the remaining width so it does
+    // not collide with the logo.
     tft.setTextSize(2);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawCentreString("Digital Timer & Counter", 160, 10, 2);
+    tft.drawCentreString("PENTAC-32", tft.width() / 2, 14, 2);
 
     // Base layout (Labels). Both columns' labels depend on that channel's mode.
     tft.setTextSize(1);

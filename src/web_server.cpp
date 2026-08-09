@@ -201,6 +201,19 @@ void web_server_init() {
     server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(LittleFS, "/style.css", "text/css");
     });
+
+    // PENS logo. Cached hard - it never changes between builds, so this keeps
+    // it out of the 10 Hz WebSocket refresh traffic.
+    server.on("/logo.png", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!LittleFS.exists("/logo.png")) {
+            request->send(404, "text/plain", "logo.png not uploaded");
+            return;
+        }
+        AsyncWebServerResponse *response =
+            request->beginResponse(LittleFS, "/logo.png", "image/png");
+        response->addHeader("Cache-Control", "max-age=86400");
+        request->send(response);
+    });
     
     // =========================================================================
     // COUNTER API ENDPOINTS
@@ -320,7 +333,7 @@ void web_server_init() {
     // });
     
     server.on("/timer/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
-        stopwatch_reset();
+        counter_timer_reset();
         elapsed_ms = 0;
         request->send(200, "application/json", "{\"status\":\"reset\"}");
         ws.textAll(make_state_json());

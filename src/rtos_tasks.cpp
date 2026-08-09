@@ -171,12 +171,6 @@ void counterTask(void *pvParameters) {
     Serial.println("Counter Task: Started");
     
     for (;;) {
-        // Timestamp count changes before any communication work can run.
-        spreadsheet_log_capture_counts(
-            pcnt_ch1_get_count(),
-            pcnt_ch2_get_count(),
-            millis());
-
         // Check for PCNT overflow events from ISR
         while (xQueueReceive(pcntEventQueue, &event, 0) == pdTRUE) {
             if (event.channel < 2) {

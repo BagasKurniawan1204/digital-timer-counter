@@ -127,10 +127,10 @@ void counter_timer_resume() {
     timer_start(COUNTER_TIMER_GROUP, COUNTER_TIMER_IDX);
 }
 
-void counter_reset() {
+void counter_timer_reset() {
     timer_set_counter_value(COUNTER_TIMER_GROUP, COUNTER_TIMER_IDX, 0);
 }
 
-void counter_get_elapsed(uint64_t *elapsed_us) {
+void counter_timer_get_elapsed(uint64_t *elapsed_us) {
     timer_get_counter_value(COUNTER_TIMER_GROUP, COUNTER_TIMER_IDX, elapsed_us);
 }
